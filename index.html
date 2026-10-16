@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Week Planner</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Week Planner</h1>
+  <div class="bank" id="bank"></div>
+</header>
+<div class="modes"><button data-view="work">Work</button><button data-view="personal">Personal / projects</button></div>
+
+<details class="card" id="settingsBox">
+  <summary>Settings</summary>
+  <div class="grid">
+    <label>Hours per day <input type="number" id="hours" step="0.25" min="0"></label>
+    <label>Lunch (min) <input type="number" id="lunch" step="5" min="0"></label>
+    <label>Usual start <input type="time" id="start"></label>
+    <label>Usual finish <input type="time" id="finish"></label>
+    <label>Usual lunch time <input type="time" id="lunchAt"></label>
+    <label>Normal commute (min, one way) <input type="number" id="commute" step="5" min="0"></label>
+  </div>
+  <p class="hint">Travel to an alternative office: anything over your normal commute is added to your time bank.</p>
+</details>
+
+<nav class="weeknav">
+  <button id="prev">&larr;</button>
+  <strong id="weekLabel"></strong>
+  <button id="next">&rarr;</button>
+  <button id="today">Today</button>
+</nav>
+
+<main id="days"></main>
+
+<section class="card">
+  <div id="summary"></div>
+  <button id="ics" class="primary">Export lunches to calendar (.ics)</button>
+  <button id="reset" class="ghost">Clear this week</button>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>
