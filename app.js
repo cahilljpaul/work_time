@@ -40,16 +40,20 @@ function weekData(key) {
 
 function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+const DURS = [15, 30, 45, 60, 90, 120, 180];
+let findDur = 60, findText = '';
+
 function taskBlock(d) {
   return `    <ul class="tasks">
       ${d.tasks.map((t, k) => `<li class="${t.done ? 'done' : ''}">
         <input type="checkbox" style="width:auto" data-tdone="${k}" ${t.done ? 'checked' : ''}>
-        <span>${t.time ? `<b>${t.time}</b> ` : ''}${esc(t.text)}</span>
+        <span>${t.time ? `<b>${t.time}</b> ` : ''}${esc(t.text)}${t.time ? ` <small class="hint">${fmtDur(t.dur || 60)}</small>` : ''}</span>
         <button class="chip" data-del="${k}" aria-label="Delete">&times;</button></li>`).join('')}
     </ul>
     <div class="row">
       <label>Goal / project <input type="text" class="newtext" placeholder="e.g. Build habit-tracker app"></label>
       <label style="flex:0 0 110px">Time (optional) <input type="time" step="${tStep()}" class="newtime"></label>
+      <label style="flex:0 0 90px">Length <select class="newdur">${DURS.map(m => `<option value="${m}" ${m === 60 ? 'selected' : ''}>${fmtDur(m)}</option>`).join('')}</select></label>
       <button class="primary" data-add="1">Add</button>
     </div>`;
 }
@@ -83,11 +87,64 @@ function sleepCheck(r) {
     <div class="hint">${fmtDur(bed)} between finishing and bed · ${fmtDur(prep)} from waking to leaving/starting</div></div>`;
 }
 
+// Free time: everything not covered by sleep, work (incl. commute and lunch) or timed tasks
+function busyOf(d) {
+  const st = store.settings, out = [];
+  const sl = toMin(st.sleepAt), wk = toMin(st.wakeAt);
+  if (sl > wk) out.push([sl, 1440], [0, wk]); else out.push([sl, wk]);
+  if (!d.off) {
+    const r = calc(d), a = r.start - r.travel, b = r.finish;
+    const lo = ((a % 1440) + 1440) % 1440, hi = lo + (b - a);
+    if (hi > 1440) out.push([lo, 1440], [0, hi - 1440]); else out.push([lo, hi]);
+  }
+  d.tasks.forEach(t => { if (t.time && !t.done) { const a = toMin(t.time); out.push([a, Math.min(1440, a + (t.dur || 60))]); } });
+  return out;
+}
+function freeSlots(d, from = 0) {
+  const busy = busyOf(d).sort((x, y) => x[0] - y[0]);
+  const free = []; let cur = from;
+  for (const [a, b] of busy) { if (a > cur) free.push([cur, a]); cur = Math.max(cur, b); }
+  if (cur < 1440) free.push([cur, 1440]);
+  return free.filter(([a, b]) => b - a >= 15);
+}
+function ideas(m) {
+  if (m < 30) return 'Quick reset: stretch, tea, tidy up, a short call';
+  if (m < 60) return 'A walk, a short workout, cook something, admin';
+  if (m < 120) return 'Gym or a run, a hobby session, see a friend';
+  if (m < 240) return 'Deep work on a project, a long outing, a big chore';
+  return 'A proper block: day-trip, big project, time with family';
+}
+function freeSection(d, i, isToday) {
+  const from = isToday ? NOW_MIN() : 0;
+  const slots = freeSlots(d, from);
+  const total = slots.reduce((n, [a, b]) => n + b - a, 0);
+  const list = slots.map(([a, b]) => `<li><b>${toTime(a)}–${toTime(b)}</b> · ${fmtDur(b - a)}<div class="idea">${ideas(b - a)}</div></li>`).join('');
+  const week = weekData(iso(monday));
+  const hits = [];
+  week.forEach((wd, k) => {
+    const isT = iso(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + k)) === iso(new Date());
+    freeSlots(wd, isT ? NOW_MIN() : 0).forEach(([a, b]) => { if (b - a >= findDur) hits.push([k, a, b]); });
+  });
+  return `<div class="result"><b>${fmtDur(total)}</b> free ${isToday ? 'for the rest of today' : 'this day'}
+      <ul class="slots">${list || '<li class="hint">No free slots.</li>'}</ul></div>
+    <div class="card finder">
+      <b>Find time for something</b>
+      <div class="row">
+        <label>What <input type="text" id="findText" value="${esc(findText)}" placeholder="e.g. Gym"></label>
+        <label style="flex:0 0 100px">How long <select id="findDur">${DURS.map(m => `<option value="${m}" ${m === findDur ? 'selected' : ''}>${fmtDur(m)}</option>`).join('')}</select></label>
+      </div>
+      <ul class="slots">${hits.map(([k, a, b]) => `<li>${DAYS[k]} <b>${toTime(a)}–${toTime(b)}</b> <span class="hint">(${fmtDur(b - a)} free)</span>
+        <button class="chip" data-book="${k}|${a}">Book ${toTime(a)}</button></li>`).join('') || '<li class="hint">Nothing that long free this week.</li>'}</ul>
+    </div>
+    <details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>
+    ${taskBlock(d)}`;
+}
+
 const NOW_MIN = () => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); };
-function dayView(d, i, date, isToday) {
+function dayView(d, i, date, isToday, free) {
   const head = `<h2>${date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
     <label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" style="width:auto" data-f="off" ${d.off ? 'checked' : ''}> Off</label></h2>`;
-  if (d.off) return `<section class="day off" data-i="${i}">${head}<p class="hint">Day off.</p>${taskBlock(d)}</section>`;
+  if (d.off && !free) return `<section class="day off" data-i="${i}">${head}<p class="hint">Day off.</p>${taskBlock(d)}</section>`;
   const r = calc(d);
   const LO = 0, HI = 1440, C = 100, R = 82;
   const ang = m => (Math.min(Math.max(m, LO), HI) - LO) / (HI - LO) * 2 * Math.PI;
@@ -101,7 +158,14 @@ function dayView(d, i, date, isToday) {
   let svg = `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#e5e9f2" stroke-width="22"/>`;
   const sl = toMin(store.settings.sleepAt), wk = toMin(store.settings.wakeAt);
   svg += sl > wk ? arc(sl, HI, 'seg-sleep', 'sleep') + arc(LO, wk, 'seg-sleep', 'sleep') : arc(sl, wk, 'seg-sleep', 'sleep');
-  svg += arc(r.start - r.travel, r.start, 'seg-commute') + arc(r.start, ls, 'seg-work', 'work') + arc(ls, ls + r.lunch, 'seg-lunch', 'lunch') + arc(ls + r.lunch, r.finish, 'seg-work', 'work');
+  if (!d.off) svg += arc(r.start - r.travel, r.start, 'seg-commute') + arc(r.start, ls, 'seg-work', 'work') + arc(ls, ls + r.lunch, 'seg-lunch', 'lunch') + arc(ls + r.lunch, r.finish, 'seg-work', 'work');
+  if (free) {
+    const ir = R - 20;
+    freeSlots(d, isToday ? NOW_MIN() : 0).forEach(([a, b]) => {
+      const a1 = ang(a), a2 = ang(b), [x1, y1] = pt(a1, ir), [x2, y2] = pt(a2, ir);
+      svg += `<path class="seg-free" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="14"><title>${toTime(a)}–${toTime(b)} free</title></path>`;
+    });
+  }
   for (let h = 0; h < 24; h += 3) {
     const [x, y] = pt(ang(h * 60), R + 20), [x2, y2] = pt(ang(h * 60), R - 14);
     svg += `<text x="${x}" y="${y + 3}" text-anchor="middle" class="tick">${h}</text>`;
@@ -139,14 +203,15 @@ function dayView(d, i, date, isToday) {
     }
     msg = lines.map(l => `<div>${l}</div>`).join('');
   }
+  const mid = free ? `<b>${fmtDur(freeSlots(d, isToday ? NOW_MIN() : 0).reduce((n, [a, b]) => n + b - a, 0))}</b><div>free</div>` : `<b>${toTime(r.start)}–${toTime(r.finish)}</b>${msg}`;
   return `<section class="day ${isToday ? 'today' : ''}" data-i="${i}">${head}
     <div class="clock"><svg viewBox="-14 -14 228 228" role="img" aria-label="Day clock">${svg}</svg>
-      <div class="clock-mid"><b>${toTime(r.start)}–${toTime(r.finish)}</b>${msg}</div></div>
+      <div class="clock-mid">${mid}</div></div>
     <div class="hint" style="text-align:center">Drag work, lunch or sleep round the dial to move them</div>
-    <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task</div>
-    ${sleepCheck(r)}
+    <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task${free ? ' <i class="free"></i>Free' : ''}</div>
+    ${free ? freeSection(d, i, isToday) : `${sleepCheck(r)}
     <details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>
-    ${taskBlock(d)}</section>`;
+    ${taskBlock(d)}`}</section>`;
 }
 
 function personalCard(d, i, date, todayKey) {
@@ -194,7 +259,7 @@ function bankTotal(before) {
 
 function render() {
   const s = store.settings;
-  const dayMode = store.view === 'day';
+  const dayMode = store.view === 'day' || store.view === 'free';
   const personal = store.view === 'personal';
   if (dayMode) monday = getMonday(selDay);
   const key = iso(monday);
@@ -210,7 +275,7 @@ function render() {
   const todayKey = iso(new Date());
   if (dayMode) {
     const i = (selDay.getDay() + 6) % 7;
-    $('days').innerHTML = dayView(wk[i], i, selDay, iso(selDay) === todayKey);
+    $('days').innerHTML = dayView(wk[i], i, selDay, iso(selDay) === todayKey, store.view === 'free');
     $('summary').innerHTML = '';
     return updateBank();
   }
@@ -266,7 +331,7 @@ function updateBank() {
 function addTask(day, d) {
   const text = day.querySelector('.newtext').value.trim();
   if (!text) return;
-  d.tasks.push({ text, time: day.querySelector('.newtime').value, done: false });
+  d.tasks.push({ text, time: day.querySelector('.newtime').value, dur: Number(day.querySelector('.newdur').value) || 60, done: false });
   d.tasks.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
   save(); render();
 }
@@ -291,7 +356,17 @@ $('days').addEventListener('change', e => {
   if (f === 'mode') d.time = e.target.value === 'start' ? store.settings.start : store.settings.finish;
   save(); render();
 });
+$('days').addEventListener('input', e => { if (e.target.id === 'findText') findText = e.target.value; });
+$('days').addEventListener('change', e => { if (e.target.id === 'findDur') { findDur = Number(e.target.value); render(); } });
 $('days').addEventListener('click', e => {
+  const bk = e.target.dataset.book;
+  if (bk) {
+    const [k, a] = bk.split('|').map(Number);
+    const d = weekData(iso(monday))[k];
+    d.tasks.push({ text: findText.trim() || 'Free-time plan', time: toTime(a), dur: findDur, done: false });
+    d.tasks.sort((x, y) => (x.time || '99:99').localeCompare(y.time || '99:99'));
+    findText = ''; save(); return render();
+  }
   const day = e.target.closest('.day');
   if (day) {
     const d = weekData(iso(monday))[day.dataset.i];
@@ -344,7 +419,7 @@ for (const k of Object.keys(DEFAULTS)) {
 
 // Week nav
 const shift = n => {
-  if (store.view === 'day') selDay = new Date(selDay.getFullYear(), selDay.getMonth(), selDay.getDate() + n);
+  if (store.view === 'day' || store.view === 'free') selDay = new Date(selDay.getFullYear(), selDay.getMonth(), selDay.getDate() + n);
   else monday.setDate(monday.getDate() + 7 * n);
   render();
 };
@@ -356,18 +431,18 @@ $('today').onclick = () => { monday = getMonday(new Date()); selDay = new Date()
 let touchX = null;
 $('days').addEventListener('touchstart', e => { touchX = e.target.closest('[data-drag]') ? null : e.touches[0].clientX; }, { passive: true });
 $('days').addEventListener('touchend', e => {
-  if (touchX === null || store.view !== 'day') return;
+  if (touchX === null || (store.view !== 'day' && store.view !== 'free')) return;
   const dx = e.changedTouches[0].clientX - touchX; touchX = null;
   if (Math.abs(dx) > 70) shift(dx < 0 ? 1 : -1);
 });
 $('days').addEventListener('click', e => {
   const h = e.target.closest('h2');
-  if (!h || store.view === 'day' || e.target.closest('label')) return;
+  if (!h || store.view === 'day' || store.view === 'free' || e.target.closest('label')) return;
   selDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + Number(h.closest('.day').dataset.i));
   store.view = 'day'; save(); render();
 });
 setInterval(() => {
-  if (store.view === 'day' && !document.activeElement.matches('input, select')) render();
+  if ((store.view === 'day' || store.view === 'free') && !document.activeElement.matches('input, select')) render();
 }, 60000);
 $('reset').onclick = () => {
   if (confirm('Clear this week?')) { delete store.weeks[iso(monday)]; save(); render(); }
