@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const DEFAULTS = { hours: 7.5, lunch: 30, start: '08:30', finish: '16:30', lunchAt: '12:30', commute: 30 };
+const DEFAULTS = { hours: 7.5, lunch: 30, start: '08:30', finish: '16:30', lunchAt: '12:30', commute: 30, sleepAt: '22:30', wakeAt: '06:30' };
 const store = JSON.parse(localStorage.getItem('worktime') || '{}');
 store.settings = Object.assign({}, DEFAULTS, store.settings);
 store.weeks = store.weeks || {};
@@ -73,28 +73,40 @@ function optRows(d, cuts = [0, 15, 20, 30].filter(c => c <= store.settings.lunch
       </div>`;
 }
 
+function sleepCheck(r) {
+  const st = store.settings, sl = toMin(st.sleepAt), wk = toMin(st.wakeAt);
+  const hrs = (wk - sl + 1440) % 1440;
+  const bed = (sl - r.finish + 1440) % 1440;
+  const prep = (r.start - r.travel - wk + 1440) % 1440;
+  const ok = hrs >= 420;
+  return `<div class="result">Sleep ${st.sleepAt}–${st.wakeAt} · <span class="${ok ? 'earn' : 'warn'}">${fmtDur(hrs)}${ok ? '' : ' (under 7h)'}</span>
+    <div class="hint">${fmtDur(bed)} between finishing and bed · ${fmtDur(prep)} from waking to leaving/starting</div></div>`;
+}
+
 const NOW_MIN = () => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); };
 function dayView(d, i, date, isToday) {
   const head = `<h2>${date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
     <label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" style="width:auto" data-f="off" ${d.off ? 'checked' : ''}> Off</label></h2>`;
   if (d.off) return `<section class="day off" data-i="${i}">${head}<p class="hint">Day off.</p>${taskBlock(d)}</section>`;
   const r = calc(d);
-  const LO = 360, HI = 1320, C = 100, R = 82;
+  const LO = 0, HI = 1440, C = 100, R = 82;
   const ang = m => (Math.min(Math.max(m, LO), HI) - LO) / (HI - LO) * 2 * Math.PI;
   const pt = (a, rad) => [C + rad * Math.sin(a), C - rad * Math.cos(a)];
-  const arc = (m1, m2, cls) => {
+  const arc = (m1, m2, cls, drag) => {
     if (m2 - m1 <= 0) return '';
     const a1 = ang(m1), a2 = ang(m2), [x1, y1] = pt(a1, R), [x2, y2] = pt(a2, R);
-    return `<path class="${cls}" d="M${x1} ${y1} A${R} ${R} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="22"/>`;
+    return `<path class="${cls}${drag ? ' grab' : ''}"${drag ? ` data-drag="${drag}"` : ''} d="M${x1} ${y1} A${R} ${R} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="22"/>`;
   };
   const ls = Math.min(Math.max(toMin(d.lunchAt), r.start), r.finish - r.lunch);
   let svg = `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#e5e9f2" stroke-width="22"/>`;
-  svg += arc(r.start - r.travel, r.start, 'seg-commute') + arc(r.start, ls, 'seg-work') + arc(ls, ls + r.lunch, 'seg-lunch') + arc(ls + r.lunch, r.finish, 'seg-work');
-  for (let h = 6; h < 22; h += 3) {
+  const sl = toMin(store.settings.sleepAt), wk = toMin(store.settings.wakeAt);
+  svg += sl > wk ? arc(sl, HI, 'seg-sleep', 'sleep') + arc(LO, wk, 'seg-sleep', 'sleep') : arc(sl, wk, 'seg-sleep', 'sleep');
+  svg += arc(r.start - r.travel, r.start, 'seg-commute') + arc(r.start, ls, 'seg-work', 'work') + arc(ls, ls + r.lunch, 'seg-lunch', 'lunch') + arc(ls + r.lunch, r.finish, 'seg-work', 'work');
+  for (let h = 0; h < 24; h += 3) {
     const [x, y] = pt(ang(h * 60), R + 20), [x2, y2] = pt(ang(h * 60), R - 14);
     svg += `<text x="${x}" y="${y + 3}" text-anchor="middle" class="tick">${h}</text>`;
   }
-  for (let m = LO; m <= HI; m += 60) {
+  for (let m = LO; m < HI; m += 60) {
     const [x1, y1] = pt(ang(m), R + 11), [x2, y2] = pt(ang(m), R + 15);
     svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="notch"/>`;
   }
@@ -130,7 +142,9 @@ function dayView(d, i, date, isToday) {
   return `<section class="day ${isToday ? 'today' : ''}" data-i="${i}">${head}
     <div class="clock"><svg viewBox="-14 -14 228 228" role="img" aria-label="Day clock">${svg}</svg>
       <div class="clock-mid"><b>${toTime(r.start)}–${toTime(r.finish)}</b>${msg}</div></div>
-    <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="task"></i>Task</div>
+    <div class="hint" style="text-align:center">Drag work, lunch or sleep round the dial to move them</div>
+    <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task</div>
+    ${sleepCheck(r)}
     <details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>
     ${taskBlock(d)}</section>`;
 }
@@ -289,6 +303,33 @@ $('days').addEventListener('click', e => {
   save(); render();
 });
 
+// Drag work / lunch / sleep around the dial
+let drag = null;
+const dialMin = (e, box) => {
+  const a = Math.atan2(e.clientX - (box.left + box.width / 2), -(e.clientY - (box.top + box.height / 2)));
+  return ((a + 2 * Math.PI) % (2 * Math.PI)) / (2 * Math.PI) * 1440;
+};
+$('days').addEventListener('pointerdown', e => {
+  const el = e.target.closest('[data-drag]'); if (!el) return;
+  const box = el.closest('svg').getBoundingClientRect();
+  const day = weekData(iso(monday))[(selDay.getDay() + 6) % 7];
+  const st = store.settings, kind = el.dataset.drag;
+  drag = { kind, box, day, from: dialMin(e, box), a: toMin(kind === 'work' ? day.time : kind === 'lunch' ? day.lunchAt : st.sleepAt), b: toMin(st.wakeAt) };
+  $('days').setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+window.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const step = store.exact ? 1 : 15;
+  const delta = Math.round((((dialMin(e, drag.box) - drag.from + 2160) % 1440) - 720) / step) * step;
+  const mv = m => toTime(m + delta);
+  if (drag.kind === 'work') drag.day.time = mv(drag.a);
+  else if (drag.kind === 'lunch') drag.day.lunchAt = mv(drag.a);
+  else { store.settings.sleepAt = mv(drag.a); store.settings.wakeAt = mv(drag.b); $('sleepAt').value = store.settings.sleepAt; $('wakeAt').value = store.settings.wakeAt; }
+  save(); render();
+});
+window.addEventListener('pointerup', () => { drag = null; });
+
 // Settings
 $('exact').checked = !!store.exact;
 $('exact').addEventListener('change', () => { store.exact = $('exact').checked; save(); applyStep(); render(); });
@@ -313,7 +354,7 @@ $('today').onclick = () => { monday = getMonday(new Date()); selDay = new Date()
 
 // Swipe between days, and tap a day heading to open it
 let touchX = null;
-$('days').addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+$('days').addEventListener('touchstart', e => { touchX = e.target.closest('[data-drag]') ? null : e.touches[0].clientX; }, { passive: true });
 $('days').addEventListener('touchend', e => {
   if (touchX === null || store.view !== 'day') return;
   const dx = e.changedTouches[0].clientX - touchX; touchX = null;
