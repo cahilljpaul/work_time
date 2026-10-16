@@ -11,7 +11,7 @@
   <h1>Week Planner</h1>
   <div class="bank" id="bank"></div>
 </header>
-<div class="modes"><button data-view="work">Work</button><button data-view="personal">Personal / projects</button></div>
+<div class="modes"><button data-view="day">Today</button><button data-view="work">Work</button><button data-view="personal">Personal / projects</button></div>
 
 <details class="card" id="settingsBox">
   <summary>Settings</summary>
@@ -23,6 +23,7 @@
     <label>Usual lunch time <input type="time" id="lunchAt"></label>
     <label>Normal commute (min, one way) <input type="number" id="commute" step="5" min="0"></label>
   </div>
+  <label style="flex-direction:row;align-items:center;gap:6px;margin-top:10px"><input type="checkbox" id="exact" style="width:auto"> Exact minutes (otherwise times step by 15 min)</label>
   <p class="hint">Travel to an alternative office: anything over your normal commute is added to your time bank.</p>
 </details>
 
