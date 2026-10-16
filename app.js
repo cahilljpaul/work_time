@@ -94,6 +94,10 @@ function dayView(d, i, date, isToday) {
     const [x, y] = pt(ang(h * 60), R + 20), [x2, y2] = pt(ang(h * 60), R - 14);
     svg += `<text x="${x}" y="${y + 3}" text-anchor="middle" class="tick">${h}</text>`;
   }
+  for (let m = LO; m <= HI; m += 60) {
+    const [x1, y1] = pt(ang(m), R + 11), [x2, y2] = pt(ang(m), R + 15);
+    svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="notch"/>`;
+  }
   d.tasks.forEach(t => {
     if (!t.time) return;
     const [x, y] = pt(ang(toMin(t.time)), R + 13);
@@ -102,7 +106,17 @@ function dayView(d, i, date, isToday) {
   let msg = '';
   if (isToday) {
     const n = NOW_MIN(), [x, y] = pt(ang(n), R + 11), [x0, y0] = pt(ang(n), R - 14);
-    svg += `<line x1="${x0}" y1="${y0}" x2="${x}" y2="${y}" class="now"/>`;
+    if (n >= LO && n < HI) {
+      const e = Math.min(n + 60, HI);
+      const [ax, ay] = pt(ang(n), R - 11), [bx, by] = pt(ang(e), R - 11);
+      svg += `<path class="ahead" d="M${C} ${C} L${ax} ${ay} A${R - 11} ${R - 11} 0 0 1 ${bx} ${by} Z"/>`;
+      const [nx, ny] = pt(ang(e), R + 15), [nx0, ny0] = pt(ang(e), R - 14), [lx, ly] = pt(ang(e), R + 24);
+      svg += `<line x1="${nx0}" y1="${ny0}" x2="${nx}" y2="${ny}" class="now plus"/>`
+        + `<text x="${lx}" y="${ly + 3}" text-anchor="middle" class="tick plus">${toTime(e)}</text>`;
+    }
+    const [tx, ty] = pt(ang(n), R + 24);
+    svg += `<line x1="${x0}" y1="${y0}" x2="${x}" y2="${y}" class="now"/>`
+      + `<text x="${tx}" y="${ty + 3}" text-anchor="middle" class="tick nowlbl">${toTime(n)}</text>`;
     const lines = [];
     if (n < r.start) lines.push(`Starts in ${fmtDur(r.start - n)}`);
     else if (n >= r.finish) lines.push('Finished for the day');
@@ -114,7 +128,7 @@ function dayView(d, i, date, isToday) {
     msg = lines.map(l => `<div>${l}</div>`).join('');
   }
   return `<section class="day ${isToday ? 'today' : ''}" data-i="${i}">${head}
-    <div class="clock"><svg viewBox="0 0 200 200" role="img" aria-label="Day clock">${svg}</svg>
+    <div class="clock"><svg viewBox="-14 -14 228 228" role="img" aria-label="Day clock">${svg}</svg>
       <div class="clock-mid"><b>${toTime(r.start)}–${toTime(r.finish)}</b>${msg}</div></div>
     <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="task"></i>Task</div>
     <details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>
