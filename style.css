@@ -61,3 +61,6 @@ button.chip.on { background:var(--accent); color:#fff; border-color:var(--accent
 .seg-sleep { stroke:#c7d2fe; } .legend i.sleep { background:#c7d2fe; }
 .grab { cursor:grab; touch-action:none; }
 .clock svg { touch-action:pan-y; }
+.clock-mid { pointer-events:none; }
+.clock svg path[data-drag] { stroke-linecap:butt; pointer-events:stroke; }
+.ahead, .now, .notch, .tick, .dot { pointer-events:none; }
