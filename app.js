@@ -166,6 +166,10 @@ function dayView(d, i, date, isToday, free) {
       svg += `<path class="seg-free" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="14"><title>${toTime(a)}–${toTime(b)} free</title></path>`;
     });
   }
+  [['sleepStart', sl], ['sleepEnd', wk]].forEach(([k, m]) => {
+    const [hx, hy] = pt(ang(m), R);
+    svg += `<circle cx="${hx}" cy="${hy}" r="9" class="handle grab" data-drag="${k}"><title>${k === 'sleepStart' ? 'Bedtime' : 'Wake up'}</title></circle>`;
+  });
   for (let h = 0; h < 24; h += 3) {
     const [x, y] = pt(ang(h * 60), R + 20), [x2, y2] = pt(ang(h * 60), R - 14);
     svg += `<text x="${x}" y="${y + 3}" text-anchor="middle" class="tick">${h}</text>`;
@@ -207,7 +211,7 @@ function dayView(d, i, date, isToday, free) {
   return `<section class="day ${isToday ? 'today' : ''}" data-i="${i}">${head}
     <div class="clock"><svg viewBox="-14 -14 228 228" role="img" aria-label="Day clock">${svg}</svg>
       <div class="clock-mid">${mid}</div></div>
-    <div class="hint" style="text-align:center">Drag work, lunch or sleep round the dial to move them</div>
+    <div class="hint" style="text-align:center">Drag work, lunch or sleep to move them · drag the white dots to resize sleep</div>
     <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task${free ? ' <i class="free"></i>Free' : ''}</div>
     ${free ? freeSection(d, i, isToday) : `${sleepCheck(r)}
     <details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>
@@ -400,6 +404,8 @@ window.addEventListener('pointermove', e => {
   const mv = m => toTime(m + delta);
   if (drag.kind === 'work') drag.day.time = mv(drag.a);
   else if (drag.kind === 'lunch') drag.day.lunchAt = mv(drag.a);
+  else if (drag.kind === 'sleepStart') { store.settings.sleepAt = mv(drag.a); $('sleepAt').value = store.settings.sleepAt; }
+  else if (drag.kind === 'sleepEnd') { store.settings.wakeAt = mv(drag.b); $('wakeAt').value = store.settings.wakeAt; }
   else { store.settings.sleepAt = mv(drag.a); store.settings.wakeAt = mv(drag.b); $('sleepAt').value = store.settings.sleepAt; $('wakeAt').value = store.settings.wakeAt; }
   save(); render();
 });

@@ -69,3 +69,4 @@ button.chip.on { background:var(--accent); color:#fff; border-color:var(--accent
 .slots li { padding:6px 0; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .slots li .idea { flex-basis:100%; font-size:.8rem; color:#667; }
 .modes button { padding:10px 4px; font-size:.85rem; }
+.handle { fill:#fff; stroke:#6366f1; stroke-width:2.5; }
