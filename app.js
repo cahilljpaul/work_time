@@ -34,7 +34,12 @@ function defaultDay(i = 0) {
 }
 function weekData(key) {
   const wk = store.weeks[key] = store.weeks[key] || [];
-  DAYS.forEach((_, i) => { if (!wk[i]) wk[i] = defaultDay(i); wk[i].tasks = wk[i].tasks || []; });
+  DAYS.forEach((_, i) => {
+    if (!wk[i]) wk[i] = defaultDay(i);
+    wk[i].tasks = wk[i].tasks || [];
+    // Weekends default to off unless the user has chosen otherwise
+    if (i >= 5 && !wk[i].offSet) { wk[i].offSet = true; if (!wk[i].tFrom && !wk[i].tTo && !wk[i].use) wk[i].off = true; }
+  });
   return wk;
 }
 
@@ -354,7 +359,7 @@ $('days').addEventListener('change', e => {
   const f = e.target.dataset.f; if (!f) return;
   const i = e.target.closest('.day').dataset.i;
   const d = weekData(iso(monday))[i];
-  if (f === 'off') d.off = e.target.checked;
+  if (f === 'off') { d.off = e.target.checked; d.offSet = true; }
   else if (f === 'use') d.use = Math.max(0, Number(e.target.value) || 0);
   else d[f] = e.target.value;
   if (f === 'mode') d.time = e.target.value === 'start' ? store.settings.start : store.settings.finish;
