@@ -50,9 +50,9 @@ button.chip.on { background:var(--accent); color:#fff; border-color:var(--accent
 .clock-mid b { font-size:1.1rem; color:var(--ink); margin-bottom:2px; }
 .seg-commute { stroke:#8b5cf6; } .seg-work { stroke:var(--accent); } .seg-lunch { stroke:#f59e0b; }
 .tick { font-size:8px; fill:#889; }
-.dot { fill:#ef4444; } .dot.done { fill:#aab; }
 .now { stroke:var(--ink); stroke-width:2; stroke-linecap:round; }
 .legend i.task { background:#ef4444; }
+.seg-task { stroke:#ef4444; } .seg-task.done { stroke:#c4c9d4; }
 .notch { stroke:#99a; stroke-width:1; }
 .ahead { fill:#2563eb22; }
 .now.plus { stroke:var(--accent); stroke-width:1.5; stroke-dasharray:2 2; }

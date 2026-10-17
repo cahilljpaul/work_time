@@ -164,10 +164,10 @@ function dayView(d, i, date, isToday, free) {
   svg += sl > wk ? arc(sl, HI, 'seg-sleep', 'sleep') + arc(LO, wk, 'seg-sleep', 'sleep') : arc(sl, wk, 'seg-sleep', 'sleep');
   if (!d.off) svg += arc(r.start - r.travel, r.start, 'seg-commute') + arc(r.start, ls, 'seg-work', 'work') + arc(ls, ls + r.lunch, 'seg-lunch', 'lunch') + arc(ls + r.lunch, r.finish, 'seg-work', 'work');
   if (free) {
-    const ir = R - 20;
+    const ir = R - 33;
     freeSlots(d, isToday ? NOW_MIN() : 0).forEach(([a, b]) => {
       const a1 = ang(a), a2 = ang(b), [x1, y1] = pt(a1, ir), [x2, y2] = pt(a2, ir);
-      svg += `<path class="seg-free" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="14"><title>${toTime(a)}–${toTime(b)} free</title></path>`;
+      svg += `<path class="seg-free" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="10"><title>${toTime(a)}–${toTime(b)} free</title></path>`;
     });
   }
   [['sleepStart', sl], ['sleepEnd', wk]].forEach(([k, m]) => {
@@ -182,10 +182,12 @@ function dayView(d, i, date, isToday, free) {
     const [x1, y1] = pt(ang(m), R + 11), [x2, y2] = pt(ang(m), R + 15);
     svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="notch"/>`;
   }
-  d.tasks.forEach(t => {
+  d.tasks.forEach((t, k) => {
     if (!t.time) return;
-    const [x, y] = pt(ang(toMin(t.time)), R + 13);
-    svg += `<circle cx="${x}" cy="${y}" r="4" class="${t.done ? 'dot done' : 'dot'}"><title>${esc(t.time + ' ' + t.text)}</title></circle>`;
+    const ir = R - 19, a = toMin(t.time), e = Math.min(1440, a + (t.dur || 60));
+    if (e <= a) return;
+    const a1 = ang(a), a2 = ang(e), [x1, y1] = pt(a1, ir), [x2, y2] = pt(a2, ir);
+    svg += `<path class="seg-task${t.done ? ' done' : ''} grab" data-drag="task" data-k="${k}" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="14"><title>${esc(t.time + ' ' + t.text)}</title></path>`;
   });
   let msg = '';
   if (isToday) {
@@ -216,7 +218,7 @@ function dayView(d, i, date, isToday, free) {
   return `<section class="day ${isToday ? 'today' : ''}" data-i="${i}">${head}
     <div class="clock"><svg viewBox="-14 -14 228 228" role="img" aria-label="Day clock">${svg}</svg>
       <div class="clock-mid">${mid}</div></div>
-    <div class="hint" style="text-align:center">Drag work, lunch or sleep to move them · drag the white dots to resize sleep</div>
+    <div class="hint" style="text-align:center">Drag work, lunch, sleep or tasks to move them · drag the white dots to resize sleep</div>
     <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task${free ? ' <i class="free"></i>Free' : ''}</div>
     ${free ? freeSection(d, i, isToday) : `${sleepCheck(r)}
     ${d.off ? '' : `<details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>`}
@@ -398,7 +400,8 @@ $('days').addEventListener('pointerdown', e => {
   const box = el.closest('svg').getBoundingClientRect();
   const day = weekData(iso(monday))[(selDay.getDay() + 6) % 7];
   const st = store.settings, kind = el.dataset.drag;
-  drag = { kind, box, day, from: dialMin(e, box), a: toMin(kind === 'work' ? day.time : kind === 'lunch' ? day.lunchAt : st.sleepAt), b: toMin(st.wakeAt) };
+  const task = kind === 'task' ? day.tasks[Number(el.dataset.k)] : null;
+  drag = { kind, task, box, day, from: dialMin(e, box), a: toMin(kind === 'work' ? day.time : kind === 'lunch' ? day.lunchAt : task ? task.time : st.sleepAt), b: toMin(st.wakeAt) };
   $('days').setPointerCapture(e.pointerId);
   e.preventDefault();
 });
@@ -408,6 +411,7 @@ window.addEventListener('pointermove', e => {
   const delta = Math.round((((dialMin(e, drag.box) - drag.from + 2160) % 1440) - 720) / step) * step;
   const mv = m => toTime(m + delta);
   if (drag.kind === 'work') drag.day.time = mv(drag.a);
+  else if (drag.kind === 'task') drag.task.time = toTime(Math.min(1440 - (drag.task.dur || 60), Math.max(0, drag.a + delta)));
   else if (drag.kind === 'lunch') drag.day.lunchAt = mv(drag.a);
   else if (drag.kind === 'sleepStart') { store.settings.sleepAt = mv(drag.a); $('sleepAt').value = store.settings.sleepAt; }
   else if (drag.kind === 'sleepEnd') { store.settings.wakeAt = mv(drag.b); $('wakeAt').value = store.settings.wakeAt; }
