@@ -70,3 +70,7 @@ button.chip.on { background:var(--accent); color:#fff; border-color:var(--accent
 .slots li .idea { flex-basis:100%; font-size:.8rem; color:#667; }
 .modes button { padding:10px 4px; font-size:.85rem; }
 .handle { fill:#fff; stroke:#6366f1; stroke-width:2.5; }
+.seg-task.sel { stroke-width:18; stroke:#dc2626; }
+.handle.task { stroke:#dc2626; }
+.chk { flex-direction:row; align-items:center; gap:5px; font-size:.9rem; color:var(--ink); }
+.chk input { width:auto; }

@@ -6,7 +6,7 @@ The clock wheel is the main focus of the app. These build on it.
 - Weekly free-time totals
 - Recurring "protected" time (gym, family) that always blocks the wheel
 - Tags for tasks, with a per-week target (e.g. 3h of project time)
-- Share free gaps with other people to find a common time
+- Real collaboration: shared task lists and seeing when others are free (needs accounts / iCloud sharing). Simple sharing (task invite, free-gap text) is already built
 
 ## Data and phone
 - Export / import backup (data currently lives only in the browser's local storage)

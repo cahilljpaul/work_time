@@ -46,14 +46,14 @@ function weekData(key) {
 function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 const DURS = [15, 30, 45, 60, 90, 120, 180];
-let findDur = 60, findText = '';
+let findDur = 60, findText = '', selTask = null;
 
 function taskBlock(d) {
   return `    <ul class="tasks">
       ${d.tasks.map((t, k) => `<li class="${t.done ? 'done' : ''}">
         <input type="checkbox" style="width:auto" data-tdone="${k}" ${t.done ? 'checked' : ''}>
         <span>${t.time ? `<b>${t.time}</b> ` : ''}${esc(t.text)}${t.time ? ` <small class="hint">${fmtDur(t.dur || 60)}</small>` : ''}</span>
-        <button class="chip" data-del="${k}" aria-label="Delete">&times;</button></li>`).join('')}
+        ${t.time ? `<button class="chip" data-share="${k}" aria-label="Share">Share</button>` : ''}<button class="chip" data-del="${k}" aria-label="Delete">&times;</button></li>`).join('')}
     </ul>
     <div class="row">
       <label>Goal / project <input type="text" class="newtext" placeholder="e.g. Build habit-tracker app"></label>
@@ -132,6 +132,7 @@ function freeSection(d, i, isToday) {
   });
   return `<div class="result"><b>${fmtDur(total)}</b> free ${isToday ? 'for the rest of today' : 'this day'}
       <ul class="slots">${list || '<li class="hint">No free slots.</li>'}</ul></div>
+    <button class="chip" data-sharefree="1">Share my free time this week</button>
     <div class="card finder">
       <b>Find time for something</b>
       <div class="row">
@@ -143,6 +144,15 @@ function freeSection(d, i, isToday) {
     </div>
     <details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>
     ${taskBlock(d)}`;
+}
+
+function taskEditor(d, date) {
+  if (!selTask || selTask.day !== iso(date)) return '';
+  const t = d.tasks[selTask.k]; if (!t || !t.time) return '';
+  const a = toMin(t.time), dur = t.dur || 60;
+  return `<div class="result taskedit"><b>${esc(t.text)}</b> · ${t.time}–${toTime(a + dur)} · ${fmtDur(dur)}
+    <div class="row"><button class="chip" data-tdur="-15">−15 min</button><button class="chip" data-tdur="15">+15 min</button><button class="chip" data-tdur="60">+1 h</button><button class="primary" data-tdone-sel="1">Done</button></div>
+    <div class="hint">Drag the white dots on the wheel to change the start or end</div></div>`;
 }
 
 const NOW_MIN = () => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); };
@@ -187,7 +197,9 @@ function dayView(d, i, date, isToday, free) {
     const ir = R - 19, a = toMin(t.time), e = Math.min(1440, a + (t.dur || 60));
     if (e <= a) return;
     const a1 = ang(a), a2 = ang(e), [x1, y1] = pt(a1, ir), [x2, y2] = pt(a2, ir);
-    svg += `<path class="seg-task${t.done ? ' done' : ''} grab" data-drag="task" data-k="${k}" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="14"><title>${esc(t.time + ' ' + t.text)}</title></path>`;
+    const sel = selTask && selTask.day === iso(date) && selTask.k === k;
+    svg += `<path class="seg-task${t.done ? ' done' : ''}${sel ? ' sel' : ''} grab" data-drag="task" data-k="${k}" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="14"><title>${esc(t.time + ' ' + t.text)}</title></path>`;
+    if (sel) svg += [['taskStart', x1, y1], ['taskEnd', x2, y2]].map(([kind, hx, hy]) => `<circle cx="${hx}" cy="${hy}" r="8" class="handle task grab" data-drag="${kind}" data-k="${k}"/>`).join('');
   });
   let msg = '';
   if (isToday) {
@@ -218,8 +230,9 @@ function dayView(d, i, date, isToday, free) {
   return `<section class="day ${isToday ? 'today' : ''}" data-i="${i}">${head}
     <div class="clock"><svg viewBox="-14 -14 228 228" role="img" aria-label="Day clock">${svg}</svg>
       <div class="clock-mid">${mid}</div></div>
-    <div class="hint" style="text-align:center">Drag work, lunch, sleep or tasks to move them · drag the white dots to resize sleep</div>
+    <div class="hint" style="text-align:center">Drag work, lunch, sleep or tasks to move them · tap a task to resize it · drag the white dots to resize sleep</div>
     <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task${free ? ' <i class="free"></i>Free' : ''}</div>
+    ${taskEditor(d, date)}
     ${free ? freeSection(d, i, isToday) : `${sleepCheck(r)}
     ${d.off ? '' : `<details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>`}
     ${taskBlock(d)}`}</section>`;
@@ -281,7 +294,6 @@ function render() {
     : `${monday.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${fri.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
   document.querySelectorAll('.modes button').forEach(b => b.classList.toggle('on', b.dataset.view === store.view));
-  $('ics').textContent = personal ? 'Export timed tasks to calendar (.ics)' : 'Export lunches to calendar (.ics)';
   $('bank').style.display = personal ? 'none' : '';
   const todayKey = iso(new Date());
   if (dayMode) {
@@ -344,7 +356,7 @@ function addTask(day, d) {
   if (!text) return;
   d.tasks.push({ text, time: day.querySelector('.newtime').value, dur: Number(day.querySelector('.newdur').value) || 60, done: false });
   d.tasks.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
-  save(); render();
+  selTask = null; save(); render();
 }
 $('days').addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.classList.contains('newtext')) {
@@ -370,19 +382,28 @@ $('days').addEventListener('change', e => {
 $('days').addEventListener('input', e => { if (e.target.id === 'findText') findText = e.target.value; });
 $('days').addEventListener('change', e => { if (e.target.id === 'findDur') { findDur = Number(e.target.value); render(); } });
 $('days').addEventListener('click', e => {
+  if (e.target.dataset.share !== undefined) return shareTask(Number(e.target.closest('.day').dataset.i), Number(e.target.dataset.share));
+  if (e.target.dataset.sharefree) return shareFree();
+  if (e.target.dataset.tdoneSel) { selTask = null; return render(); }
+  if (e.target.dataset.tdur && selTask) {
+    const t = weekData(iso(monday))[(selDay.getDay() + 6) % 7].tasks[selTask.k];
+    const a = toMin(t.time), step = store.exact ? 1 : 15;
+    t.dur = Math.max(step, Math.min(1440 - a, (t.dur || 60) + Number(e.target.dataset.tdur)));
+    save(); return render();
+  }
   const bk = e.target.dataset.book;
   if (bk) {
     const [k, a] = bk.split('|').map(Number);
     const d = weekData(iso(monday))[k];
     d.tasks.push({ text: findText.trim() || 'Free-time plan', time: toTime(a), dur: findDur, done: false });
     d.tasks.sort((x, y) => (x.time || '99:99').localeCompare(y.time || '99:99'));
-    findText = ''; save(); return render();
+    selTask = null; findText = ''; save(); return render();
   }
   const day = e.target.closest('.day');
   if (day) {
     const d = weekData(iso(monday))[day.dataset.i];
     if (e.target.dataset.add) return addTask(day, d);
-    if (e.target.dataset.del) { d.tasks.splice(Number(e.target.dataset.del), 1); save(); return render(); }
+    if (e.target.dataset.del) { d.tasks.splice(Number(e.target.dataset.del), 1); selTask = null; save(); return render(); }
   }
   const c = e.target.closest('[data-cut]'); if (!c) return;
   weekData(iso(monday))[c.closest('.day').dataset.i].cut = Number(c.dataset.cut);
@@ -400,8 +421,8 @@ $('days').addEventListener('pointerdown', e => {
   const box = el.closest('svg').getBoundingClientRect();
   const day = weekData(iso(monday))[(selDay.getDay() + 6) % 7];
   const st = store.settings, kind = el.dataset.drag;
-  const task = kind === 'task' ? day.tasks[Number(el.dataset.k)] : null;
-  drag = { kind, task, box, day, from: dialMin(e, box), a: toMin(kind === 'work' ? day.time : kind === 'lunch' ? day.lunchAt : task ? task.time : st.sleepAt), b: toMin(st.wakeAt) };
+  const task = el.dataset.k !== undefined ? day.tasks[Number(el.dataset.k)] : null;
+  drag = { kind, task, moved: false, box, day, from: dialMin(e, box), a: toMin(kind === 'work' ? day.time : kind === 'lunch' ? day.lunchAt : task ? task.time : st.sleepAt), dur: task ? (task.dur || 60) : 0, b: toMin(st.wakeAt) };
   $('days').setPointerCapture(e.pointerId);
   e.preventDefault();
 });
@@ -410,7 +431,13 @@ window.addEventListener('pointermove', e => {
   const step = store.exact ? 1 : 15;
   const delta = Math.round((((dialMin(e, drag.box) - drag.from + 2160) % 1440) - 720) / step) * step;
   const mv = m => toTime(m + delta);
+  if (delta) drag.moved = true;
   if (drag.kind === 'work') drag.day.time = mv(drag.a);
+  else if (drag.kind === 'taskEnd') drag.task.dur = Math.max(step, Math.min(1440 - drag.a, drag.dur + delta));
+  else if (drag.kind === 'taskStart') {
+    const ns = Math.max(0, Math.min(drag.a + drag.dur - step, drag.a + delta));
+    drag.task.time = toTime(ns); drag.task.dur = drag.a + drag.dur - ns;
+  }
   else if (drag.kind === 'task') drag.task.time = toTime(Math.min(1440 - (drag.task.dur || 60), Math.max(0, drag.a + delta)));
   else if (drag.kind === 'lunch') drag.day.lunchAt = mv(drag.a);
   else if (drag.kind === 'sleepStart') { store.settings.sleepAt = mv(drag.a); $('sleepAt').value = store.settings.sleepAt; }
@@ -418,7 +445,14 @@ window.addEventListener('pointermove', e => {
   else { store.settings.sleepAt = mv(drag.a); store.settings.wakeAt = mv(drag.b); $('sleepAt').value = store.settings.sleepAt; $('wakeAt').value = store.settings.wakeAt; }
   save(); render();
 });
-window.addEventListener('pointerup', () => { drag = null; });
+window.addEventListener('pointerup', () => {
+  const d = drag; drag = null;
+  if (d && d.kind === 'task' && !d.moved) {
+    const k = d.day.tasks.indexOf(d.task), day = iso(selDay);
+    selTask = selTask && selTask.day === day && selTask.k === k ? null : { day, k };
+    render();
+  }
+});
 
 // Settings
 $('exact').checked = !!store.exact;
@@ -465,42 +499,83 @@ $('reset').onclick = () => {
 
 document.querySelectorAll('.modes button').forEach(b => b.onclick = () => { store.view = b.dataset.view; save(); render(); });
 
-function exportPersonal() {
-  const wk = weekData(iso(monday));
+// Calendar export: floating local times, only the selected kinds of event
+const EXPORTS = [['work', 'Work'], ['commute', 'Commute'], ['lunch', 'Lunch'], ['tasks', 'Tasks'], ['sleep', 'Sleep']];
+store.export = store.export || { work: true, commute: true, lunch: true, tasks: true, sleep: false };
+$('exportOpts').innerHTML = EXPORTS.map(([k, n]) => `<label class="chk"><input type="checkbox" data-exp="${k}" ${store.export[k] ? 'checked' : ''}> ${n}</label>`).join('');
+$('exportOpts').addEventListener('change', e => {
+  if (e.target.dataset.exp) { store.export[e.target.dataset.exp] = e.target.checked; save(); }
+});
+const icsText = s => String(s).replace(/\\/g, '\\\\').replace(/[,;]/g, m => '\\' + m).replace(/\r?\n/g, '\\n');
+
+function buildEvents() {
+  const sel = store.export, st = store.settings, wk = weekData(iso(monday));
   const stamp = new Date().toISOString().replace(/[-:]|\.\d+/g, '');
   const ev = [];
-  wk.forEach((d, i) => d.tasks.forEach((t, k) => {
-    if (!t.time) return;
-    const date = new Date(monday); date.setDate(date.getDate() + i);
-    const ymd = iso(date).replace(/-/g, '');
-    const m = toMin(t.time);
-    const f = x => ymd + 'T' + toTime(x).replace(':', '') + '00';
-    ev.push(`BEGIN:VEVENT\r\nUID:task-${ymd}-${k}@worktime\r\nDTSTAMP:${stamp}\r\nDTSTART:${f(m)}\r\nDTEND:${f(m + 60)}\r\nSUMMARY:${t.text.replace(/[\r\n,;]/g, ' ')}\r\nEND:VEVENT`);
-  }));
+  const add = (uid, date, from, to, title, desc) => {
+    if (to <= from) return;
+    const f = m => {
+      const x = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, Math.round(m));
+      return iso(x).replace(/-/g, '') + 'T' + toTime(x.getHours() * 60 + x.getMinutes()).replace(':', '') + '00';
+    };
+    ev.push(`BEGIN:VEVENT\r\nUID:${uid}@worktime\r\nDTSTAMP:${stamp}\r\nDTSTART:${f(from)}\r\nDTEND:${f(to)}\r\nSUMMARY:${icsText(title)}${desc ? `\r\nDESCRIPTION:${icsText(desc)}` : ''}\r\nEND:VEVENT`);
+  };
+  wk.forEach((d, i) => {
+    const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+    const id = iso(date).replace(/-/g, '');
+    if (!d.off) {
+      const r = calc(d), ls = Math.min(Math.max(toMin(d.lunchAt), r.start), r.finish - r.lunch);
+      if (sel.commute && r.travel) add(`commute-${id}`, date, r.start - r.travel, r.start, 'Commute');
+      if (sel.work) {
+        add(`work-${id}-a`, date, r.start, ls, 'Work');
+        add(`work-${id}-b`, date, ls + r.lunch, r.finish, 'Work', `Finish ${toTime(r.finish)}`);
+      }
+      if (sel.lunch) add(`lunch-${id}`, date, ls, ls + r.lunch, 'Lunch', `Finish ${toTime(r.finish)}`);
+    }
+    if (sel.tasks) d.tasks.forEach((t, k) => { if (t.time) add(`task-${id}-${k}`, date, toMin(t.time), toMin(t.time) + (t.dur || 60), t.text); });
+    if (sel.sleep) {
+      const sl = toMin(st.sleepAt), w = toMin(st.wakeAt);
+      add(`sleep-${id}`, date, sl, sl < w ? w : w + 1440, 'Sleep');
+    }
+  });
   return ev;
 }
+$('ics').onclick = () => download(buildEvents(), 'week');
 
-// Calendar export: floating local times
-$('ics').onclick = () => {
-  if (store.view === 'personal') return download(exportPersonal(), 'tasks');
-  const wk = weekData(iso(monday));
-  const stamp = new Date().toISOString().replace(/[-:]|\.\d+/g, '');
-  const ev = [];
-  wk.forEach((d, i) => {
-    if (d.off) return;
-    const r = calc(d);
-    if (!r.lunch) return;
-    const date = new Date(monday); date.setDate(date.getDate() + i);
-    const ymd = iso(date).replace(/-/g, '');
-    const ls = toMin(d.lunchAt);
-    const t = m => ymd + 'T' + toTime(m).replace(':', '') + '00';
-    ev.push(`BEGIN:VEVENT\r\nUID:lunch-${ymd}@worktime\r\nDTSTAMP:${stamp}\r\nDTSTART:${t(ls)}\r\nDTEND:${t(ls + r.lunch)}\r\nSUMMARY:Lunch\r\nDESCRIPTION:Finish ${toTime(r.finish)}\r\nEND:VEVENT`);
-  });
-  download(ev, 'lunch');
-};
+// Sharing: no accounts, just the phone's share sheet (falls back to a download / clipboard)
+async function shareOut({ title, text, file }) {
+  try {
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) return await navigator.share({ title, files: [file] });
+    if (!file && navigator.share) return await navigator.share({ title, text });
+  } catch (err) { if (err.name === 'AbortError') return; }
+  if (file) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+  } else if (navigator.clipboard) {
+    await navigator.clipboard.writeText(text); alert('Copied to clipboard.');
+  } else prompt('Copy this:', text);
+}
+function shareTask(dayIdx, k) {
+  const t = weekData(iso(monday))[dayIdx].tasks[k];
+  const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + dayIdx);
+  const ymd = iso(date).replace(/-/g, ''), a = toMin(t.time), e = a + (t.dur || 60);
+  const f = m => ymd + 'T' + toTime(m).replace(':', '') + '00';
+  const text = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//worktime//EN\r\nBEGIN:VEVENT\r\nUID:share-${ymd}-${k}-${Date.now()}@worktime\r\nDTSTAMP:${new Date().toISOString().replace(/[-:]|\.\d+/g, '')}\r\nDTSTART:${f(a)}\r\nDTEND:${f(Math.min(e, 1439))}\r\nSUMMARY:${icsText(t.text)}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`;
+  shareOut({ title: t.text, file: new File([text], 'invite.ics', { type: 'text/calendar' }) });
+}
+function shareFree() {
+  const lines = weekData(iso(monday)).map((d, i) => {
+    const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+    const isT = iso(date) === iso(new Date());
+    if (iso(date) < iso(new Date())) return null;
+    const slots = freeSlots(d, isT ? NOW_MIN() : 0).filter(([a, b]) => b - a >= 60);
+    return slots.length ? `${DAYS[i]} ${date.getDate()}/${date.getMonth() + 1}: ${slots.map(([a, b]) => toTime(a) + '–' + toTime(b)).join(', ')}` : null;
+  }).filter(Boolean);
+  shareOut({ title: 'My free time', text: `I'm free (1h+ gaps):\n${lines.join('\n') || 'Nothing free this week'}` });
+}
 
 function download(ev, name) {
-  if (!ev.length) return alert('Nothing to export.');
+  if (!ev.length) return alert('Nothing to export. Tick at least one item with something planned.');
   const text = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//worktime//EN\r\n${ev.join('\r\n')}\r\nEND:VCALENDAR\r\n`;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type: 'text/calendar' }));
