@@ -38,7 +38,7 @@ function weekData(key) {
     if (!wk[i]) wk[i] = defaultDay(i);
     wk[i].tasks = wk[i].tasks || [];
     // Weekends default to off unless the user has chosen otherwise
-    if (i >= 5 && !wk[i].offSet) { wk[i].offSet = true; if (!wk[i].tFrom && !wk[i].tTo && !wk[i].use) wk[i].off = true; }
+    if (i >= 5 && wk[i].offV !== 2) { wk[i].offV = 2; wk[i].off = true; }
   });
   return wk;
 }
@@ -149,7 +149,6 @@ const NOW_MIN = () => { const n = new Date(); return n.getHours() * 60 + n.getMi
 function dayView(d, i, date, isToday, free) {
   const head = `<h2>${date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
     <label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" style="width:auto" data-f="off" ${d.off ? 'checked' : ''}> Off</label></h2>`;
-  if (d.off && !free) return `<section class="day off" data-i="${i}">${head}<p class="hint">Day off.</p>${taskBlock(d)}</section>`;
   const r = calc(d);
   const LO = 0, HI = 1440, C = 100, R = 82;
   const ang = m => (Math.min(Math.max(m, LO), HI) - LO) / (HI - LO) * 2 * Math.PI;
@@ -203,7 +202,8 @@ function dayView(d, i, date, isToday, free) {
     svg += `<line x1="${x0}" y1="${y0}" x2="${x}" y2="${y}" class="now"/>`
       + `<text x="${tx}" y="${ty + 3}" text-anchor="middle" class="tick nowlbl">${toTime(n)}</text>`;
     const lines = [];
-    if (n < r.start) lines.push(`Starts in ${fmtDur(r.start - n)}`);
+    if (d.off) lines.push('Day off');
+    else if (n < r.start) lines.push(`Starts in ${fmtDur(r.start - n)}`);
     else if (n >= r.finish) lines.push('Finished for the day');
     else {
       if (n < ls) lines.push(`Lunch in ${fmtDur(ls - n)}`);
@@ -212,14 +212,14 @@ function dayView(d, i, date, isToday, free) {
     }
     msg = lines.map(l => `<div>${l}</div>`).join('');
   }
-  const mid = free ? `<b>${fmtDur(freeSlots(d, isToday ? NOW_MIN() : 0).reduce((n, [a, b]) => n + b - a, 0))}</b><div>free</div>` : `<b>${toTime(r.start)}–${toTime(r.finish)}</b>${msg}`;
+  const mid = free ? `<b>${fmtDur(freeSlots(d, isToday ? NOW_MIN() : 0).reduce((n, [a, b]) => n + b - a, 0))}</b><div>free</div>` : (d.off ? `<b>Day off</b>` : `<b>${toTime(r.start)}–${toTime(r.finish)}</b>${msg}`);
   return `<section class="day ${isToday ? 'today' : ''}" data-i="${i}">${head}
     <div class="clock"><svg viewBox="-14 -14 228 228" role="img" aria-label="Day clock">${svg}</svg>
       <div class="clock-mid">${mid}</div></div>
     <div class="hint" style="text-align:center">Drag work, lunch or sleep to move them · drag the white dots to resize sleep</div>
     <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task${free ? ' <i class="free"></i>Free' : ''}</div>
     ${free ? freeSection(d, i, isToday) : `${sleepCheck(r)}
-    <details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>
+    ${d.off ? '' : `<details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>`}
     ${taskBlock(d)}`}</section>`;
 }
 
@@ -359,7 +359,7 @@ $('days').addEventListener('change', e => {
   const f = e.target.dataset.f; if (!f) return;
   const i = e.target.closest('.day').dataset.i;
   const d = weekData(iso(monday))[i];
-  if (f === 'off') { d.off = e.target.checked; d.offSet = true; }
+  if (f === 'off') { d.off = e.target.checked; d.offV = 2; }
   else if (f === 'use') d.use = Math.max(0, Number(e.target.value) || 0);
   else d[f] = e.target.value;
   if (f === 'mode') d.time = e.target.value === 'start' ? store.settings.start : store.settings.finish;
