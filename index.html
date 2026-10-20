@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://hjhjavwpwjksjhxgsqns.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'">
 <title>Week Planner</title>
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <header>
@@ -46,6 +47,14 @@
   <button id="reset" class="ghost">Clear this week</button>
 </section>
 
-<script src="app.js?v=3"></script>
+<details class="card" id="acctBox">
+  <summary>Account &amp; sync</summary>
+  <div id="account" class="acct"></div>
+  <p class="hint" id="acctMsg">Sign in to save your weeks online and use them on any device.</p>
+</details>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+<script src="app.js?v=4"></script>
+<script src="sync.js?v=4"></script>
 </body>
 </html>

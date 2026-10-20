@@ -110,3 +110,7 @@ button.chip.on { background:var(--accent); color:#fff; border-color:var(--accent
 .panel.more > summary { margin:0; }
 .panel.more[open] > summary { margin-bottom:8px; }
 .taskedit { text-align:center; margin:0 0 12px; }
+
+.acct{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.acct input{flex:1 1 180px}
+.acct-email{font-weight:600;margin-right:6px}

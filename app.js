@@ -7,7 +7,11 @@ store.weeks = store.weeks || {};
 store.view = ({ day: 'work', personal: 'free' })[store.view] || store.view || 'work';
 const tStep = () => store.exact ? 60 : 900;
 function applyStep() { document.querySelectorAll('input[type=time]').forEach(i => i.step = tStep()); }
-const save = () => localStorage.setItem('worktime', JSON.stringify(store));
+const save = () => {
+  store.updatedAt = Date.now();
+  localStorage.setItem('worktime', JSON.stringify(store));
+  if (window.cloudChanged) window.cloudChanged();
+};
 
 let monday = getMonday(new Date());
 let selDay = new Date();
