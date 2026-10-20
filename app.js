@@ -71,7 +71,7 @@ function taskBlock(d) {
     </ul>
     <div class="row">
       <label>Goal / project <input type="text" class="newtext" placeholder="e.g. Build habit-tracker app"></label>
-      <label style="flex:0 0 110px">Time (optional) <input type="time" step="${tStep()}" class="newtime"></label>
+      <label style="flex:0 0 110px">Time (auto if blank) <input type="time" step="${tStep()}" class="newtime"></label>
       <label style="flex:0 0 90px">Length <select class="newdur">${DURS.map(m => `<option value="${m}" ${m === 60 ? 'selected' : ''}>${fmtDur(m)}</option>`).join('')}</select></label>
       <button class="primary" data-add="1">Add</button>
     </div>`;
@@ -414,7 +414,15 @@ function updateBank() {
 function addTask(day, d) {
   const text = day.querySelector('.newtext').value.trim();
   if (!text) return;
-  d.tasks.push({ text, time: day.querySelector('.newtime').value, dur: Number(day.querySelector('.newdur').value) || 60, done: false });
+  const dur = Number(day.querySelector('.newdur').value) || 60;
+  let time = day.querySelector('.newtime').value;
+  if (!time) {
+    // No time given: put it in the first free gap that fits so it shows on the wheel
+    const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + Number(day.dataset.i));
+    const slot = freeSlots(d, iso(date) === iso(new Date()) ? NOW_MIN() : 0).find(([a, b]) => b - a >= dur);
+    if (slot) time = toTime(slot[0]);
+  }
+  d.tasks.push({ text, time, dur, done: false });
   d.tasks.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
   selTask = null; save(); render();
 }
