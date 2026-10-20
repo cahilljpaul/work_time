@@ -357,11 +357,22 @@ function weekSummary(wk, key) {
   const net = weekEarned + weekAdj - weekUsed;
   const bf = bankTotal(key);
   const diff = weekWork + weekUsed - weekAdj - target;
-  return `<b>Week check</b>
-    <div>Target ${fmtDur(target)} (${active.length} days) · to work <b>${fmtDur(weekWork)}</b> + banked time used ${fmtDur(weekUsed)}
-      · <span class="${diff ? 'warn' : 'earn'}">${diff ? (diff > 0 ? 'over by ' : 'short by ') + fmtDur(Math.abs(diff)) : 'on target'}</span></div>
-    <div>Bank: ${fmtDur(bf)} brought forward · this week <span class="${net < 0 ? 'warn' : 'earn'}">${net >= 0 ? '+' : ''}${fmtDur(net)}</span> · carried forward <b>${fmtDur(bf + net)}</b></div>
-    ${bf + net < 0 ? `<div class="warn">You owe ${fmtDur(-(bf + net))} — stay ${fmtDur(-(bf + net))} longer to make it up.</div>` : ''}`;
+  const signed = m => (m > 0 ? '+' : m < 0 ? '−' : '') + fmtDur(Math.abs(m));
+  const cls = m => m < 0 ? 'warn' : m > 0 ? 'earn' : '';
+  const status = diff ? `${diff > 0 ? 'Over' : 'Short'} by ${fmtDur(Math.abs(diff))}` : 'On target';
+  const rows = wk.map((d, i) => {
+    if (d.off) return '';
+    const c = calc(d), chg = c.earned + (d.adj || 0) - (d.use || 0);
+    return `<tr><td>${DAYS[i]}</td><td>${d.loc === 'wfh' ? 'WFH' : 'Office'}</td><td>${fmtDur(c.required)}</td><td class="${cls(chg)}">${chg ? signed(chg) : '–'}</td></tr>`;
+  }).join('');
+  return `<div class="wc-head"><h3>Week check</h3><span class="pill ${diff ? 'warn' : 'ok'}">${status}</span></div>
+    <div class="wc-tiles">
+      <div><small>Target</small><b>${fmtDur(target)}</b><i>${active.length} days</i></div>
+      <div><small>To work</small><b>${fmtDur(weekWork)}</b><i>+ ${fmtDur(weekUsed)} banked used</i></div>
+      <div><small>Bank carried</small><b class="${cls(bf + net)}">${fmtDur(bf + net)}</b><i>${fmtDur(bf)} brought, ${net ? signed(net) : 'no change'} this week</i></div>
+    </div>
+    <table class="wc-table"><thead><tr><th>Day</th><th>Where</th><th>Work</th><th>Bank</th></tr></thead><tbody>${rows}</tbody></table>
+    ${bf + net < 0 ? `<div class="warn wc-note">You owe ${fmtDur(-(bf + net))} — stay ${fmtDur(-(bf + net))} longer to make it up.</div>` : ''}`;
 }
 
 function planAhead(wk, selIdx, todayKey) {

@@ -114,3 +114,20 @@ button.chip.on { background:var(--accent); color:#fff; border-color:var(--accent
 .acct{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
 .acct input{flex:1 1 180px}
 .acct-email{font-weight:600;margin-right:6px}
+
+.wc-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.wc-head h3{margin:0;font-size:1.1rem}
+.pill{padding:4px 12px;border-radius:999px;font-size:.85rem;font-weight:600;background:#e8f5ec;color:var(--ok)}
+.pill.warn{background:#fdf0e0;color:var(--warn)}
+.wc-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.wc-tiles>div{background:var(--bg);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.wc-tiles small{color:#667;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+.wc-tiles b{font-size:1.15rem}
+.wc-tiles i{font-style:normal;color:#667;font-size:.78rem}
+.wc-table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:12px}
+.wc-table th,.wc-table td{padding:9px 12px;text-align:left;font-size:.9rem}
+.wc-table th{background:var(--bg);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:#667}
+.wc-table td+td,.wc-table th+th{text-align:right}
+.wc-table tbody tr+tr td{border-top:1px solid var(--line)}
+.wc-note{margin-bottom:10px}
+@media (max-width:420px){.wc-tiles{grid-template-columns:1fr}}
