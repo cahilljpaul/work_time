@@ -590,7 +590,6 @@ scheduleTick();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) liveTick(); });
 window.addEventListener('focus', liveTick);
 window.addEventListener('pageshow', liveTick);
-document.addEventListener('focusout', () => setTimeout(liveTick, 0));
 $('reset').onclick = () => {
   if (confirm('Clear this week?')) { delete store.weeks[iso(monday)]; save(); render(); }
 };
