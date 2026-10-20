@@ -1,9 +1,19 @@
 const $ = id => document.getElementById(id);
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const DEFAULTS = { hours: 7.5, lunch: 30, start: '08:30', finish: '16:30', lunchAt: '12:30', commute: 30, sleepAt: '22:30', wakeAt: '06:30' };
+const DEFAULTS = { hours: 7.5, lunch: 60, start: '08:00', finish: '16:30', lunchAt: '13:00', commute: 30, sleepAt: '22:30', wakeAt: '06:30' };
 const store = JSON.parse(localStorage.getItem('worktime') || '{}');
 store.settings = Object.assign({}, DEFAULTS, store.settings);
 store.weeks = store.weeks || {};
+// One-time move to the new standard day (08:00-16:30, 1h lunch at 13:00); untouched days follow
+if (store.defaultsV !== 2) {
+  const old = store.settings;
+  Object.values(store.weeks).forEach(wk => wk.forEach(d => {
+    if (d && d.mode === 'start' && d.time === old.start && !d.adj && !d.use) d.time = DEFAULTS.start;
+    if (d && d.lunchAt === old.lunchAt && !d.cut) d.lunchAt = DEFAULTS.lunchAt;
+  }));
+  Object.assign(store.settings, { hours: DEFAULTS.hours, lunch: DEFAULTS.lunch, start: DEFAULTS.start, finish: DEFAULTS.finish, lunchAt: DEFAULTS.lunchAt, commute: DEFAULTS.commute });
+  store.defaultsV = 2;
+}
 store.view = ({ day: 'work', personal: 'free' })[store.view] || store.view || 'work';
 const tStep = () => store.exact ? 60 : 900;
 function applyStep() { document.querySelectorAll('input[type=time]').forEach(i => i.step = tStep()); }
