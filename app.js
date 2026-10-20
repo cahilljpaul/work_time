@@ -246,9 +246,10 @@ function personalCard(d, i, date, todayKey) {
   </section>`;
 }
 // Core calculations for one day
+function fmtAdj(m) { return (m > 0 ? '+' : m < 0 ? '−' : '') + fmtDur(Math.abs(m)); }
 function calc(d) {
   const s = store.settings;
-  const required = Math.max(0, s.hours * 60 - (d.use || 0));
+  const required = Math.max(0, s.hours * 60 + (d.adj || 0) - (d.use || 0));
   const lunch = Math.max(0, s.lunch - d.cut);
   const total = required + lunch;
   const t = toMin(d.time);
@@ -261,7 +262,7 @@ function calc(d) {
     travel = (b - a + 1440) % 1440;
     earned = Math.max(0, travel - s.commute);
   }
-  return { required, lunch, total, start, finish, travel, earned };
+  return { adj: d.adj || 0, required, lunch, total, start, finish, travel, earned };
 }
 
 function statusBar(d, r) {
@@ -276,7 +277,7 @@ function bankTotal(before) {
   let earned = 0, used = 0;
   for (const [k, wk] of Object.entries(store.weeks)) {
     if (before && k >= before) continue;
-    wk.forEach(d => { if (!d.off) { earned += calc(d).earned; used += d.use || 0; } });
+    wk.forEach(d => { if (!d.off) { earned += calc(d).earned + (d.adj || 0); used += d.use || 0; } });
   }
   return earned - used;
 }
@@ -314,10 +315,13 @@ function render() {
         <label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" style="width:auto" data-f="off" ${d.off ? 'checked' : ''}> Off</label></h2>
       ${d.off ? '' : `
       ${planRows(d)}
+      <div class="row"><label style="flex:1">Work ${fmtAdj(d.adj || 0)} vs usual
+        <input type="range" data-f="adj" min="-240" max="240" step="15" value="${d.adj || 0}"></label></div>
       <details class="more" ${(d.cut || d.tFrom || d.tTo || d.use) ? 'open' : ''}><summary>Lunch &amp; travel options</summary>${optRows(d, cuts)}</details>
       ${statusBar(d, r)}
       <div class="result">
         ${toTime(r.start)} → <b>${toTime(r.finish)}</b> · work ${fmtDur(r.required)} · lunch ${toTime(lunchStart)}–${toTime(lunchStart + r.lunch)} (${r.lunch}m)
+        ${r.adj ? `<div class="${r.adj < 0 ? 'warn' : 'earn'}">${r.adj > 0 ? `+${fmtDur(r.adj)} banked` : `${fmtDur(-r.adj)} owed — stay ${fmtDur(-r.adj)} longer another day`}</div>` : ''}
         ${r.travel ? `<div>Travel ${fmtDur(r.travel)} · <span class="earn">+${fmtDur(r.earned)} banked</span></div>` : ''}
       </div>`}
       ${taskBlock(d)}
@@ -334,19 +338,22 @@ function render() {
   const weekUsed = active.reduce((n, d) => n + (d.use || 0), 0);
   const weekWork = active.reduce((n, d) => n + calc(d).required, 0);
   const target = active.length * s.hours * 60;
-  const net = weekEarned - weekUsed;
+  const weekAdj = active.reduce((n, d) => n + (d.adj || 0), 0);
+  const net = weekEarned + weekAdj - weekUsed;
   const bf = bankTotal(key);
-  const diff = weekWork + weekUsed - target;
+  const diff = weekWork + weekUsed - weekAdj - target;
   $('summary').innerHTML = `<b>Week check</b>
     <div>Target ${fmtDur(target)} (${active.length} days) · to work <b>${fmtDur(weekWork)}</b> + banked time used ${fmtDur(weekUsed)}
       · <span class="${diff ? 'warn' : 'earn'}">${diff ? (diff > 0 ? 'over by ' : 'short by ') + fmtDur(Math.abs(diff)) : 'on target'}</span></div>
-    <div>Bank: ${fmtDur(bf)} brought forward · this week <span class="${net < 0 ? 'warn' : 'earn'}">${net >= 0 ? '+' : ''}${fmtDur(net)}</span> · carried forward <b>${fmtDur(bf + net)}</b></div>`;
+    <div>Bank: ${fmtDur(bf)} brought forward · this week <span class="${net < 0 ? 'warn' : 'earn'}">${net >= 0 ? '+' : ''}${fmtDur(net)}</span> · carried forward <b>${fmtDur(bf + net)}</b></div>
+    ${bf + net < 0 ? `<div class="warn">You owe ${fmtDur(-(bf + net))} — stay ${fmtDur(-(bf + net))} longer to make it up.</div>` : ''}`;
 
   updateBank();
 }
 function updateBank() {
   const bank = bankTotal();
   $('bank').textContent = `Time bank: ${fmtDur(bank)}`;
+  $('bank').textContent = bank < 0 ? `Time owed: ${fmtDur(-bank)} — stay ${fmtDur(-bank)} longer` : `Time bank: ${fmtDur(bank)}`;
   $('bank').classList.toggle('neg', bank < 0);
 }
 
@@ -374,6 +381,7 @@ $('days').addEventListener('change', e => {
   const i = e.target.closest('.day').dataset.i;
   const d = weekData(iso(monday))[i];
   if (f === 'off') { d.off = e.target.checked; d.offV = 2; }
+  else if (f === 'adj') d.adj = Number(e.target.value) || 0;
   else if (f === 'use') d.use = Math.max(0, Number(e.target.value) || 0);
   else d[f] = e.target.value;
   if (f === 'mode') d.time = e.target.value === 'start' ? store.settings.start : store.settings.finish;
