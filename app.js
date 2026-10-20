@@ -4,7 +4,7 @@ const DEFAULTS = { hours: 7.5, lunch: 30, start: '08:30', finish: '16:30', lunch
 const store = JSON.parse(localStorage.getItem('worktime') || '{}');
 store.settings = Object.assign({}, DEFAULTS, store.settings);
 store.weeks = store.weeks || {};
-store.view = store.view || 'work';
+store.view = ({ day: 'work', personal: 'free' })[store.view] || store.view || 'work';
 const tStep = () => store.exact ? 60 : 900;
 function applyStep() { document.querySelectorAll('input[type=time]').forEach(i => i.step = tStep()); }
 const save = () => localStorage.setItem('worktime', JSON.stringify(store));
@@ -76,8 +76,8 @@ function optRows(d, cuts = [0, 15, 20, 30].filter(c => c <= store.settings.lunch
         ${cuts.map(c => `<button class="chip ${d.cut === c ? 'on' : ''}" data-cut="${c}">${c ? '-' + c : 'none'}</button>`).join('')}
       </div>
       <div class="row">
-        <label>Commute started <input type="time" step="${tStep()}" data-f="tFrom" value="${d.tFrom}"></label>
-        <label>Arrived office <input type="time" step="${tStep()}" data-f="tTo" value="${d.tTo}"></label>
+        ${d.loc === 'wfh' ? '' : `<label>Commute started <input type="time" step="${tStep()}" data-f="tFrom" value="${d.tFrom}"></label>
+        <label>Arrived office <input type="time" step="${tStep()}" data-f="tTo" value="${d.tTo}"></label>`}
         <label>Use banked (min) <input type="number" data-f="use" min="0" step="5" value="${d.use || 0}"></label>
       </div>`;
 }
@@ -85,11 +85,14 @@ function optRows(d, cuts = [0, 15, 20, 30].filter(c => c <= store.settings.lunch
 function sleepCheck(r) {
   const st = store.settings, sl = toMin(st.sleepAt), wk = toMin(st.wakeAt);
   const hrs = (wk - sl + 1440) % 1440;
-  const bed = (sl - r.finish + 1440) % 1440;
-  const prep = (r.start - r.travel - wk + 1440) % 1440;
+  const bed = (sl - r.finish - r.cOut + 1440) % 1440;
+  const prep = (r.start - r.cIn - wk + 1440) % 1440;
   const ok = hrs >= 420;
-  return `<div class="result">Sleep ${st.sleepAt}–${st.wakeAt} · <span class="${ok ? 'earn' : 'warn'}">${fmtDur(hrs)}${ok ? '' : ' (under 7h)'}</span>
-    <div class="hint">${fmtDur(bed)} between finishing and bed · ${fmtDur(prep)} from waking to leaving/starting</div></div>`;
+  return `<div class="big">${st.sleepAt}–${st.wakeAt} · <span class="${ok ? 'earn' : 'warn'}">${fmtDur(hrs)}${ok ? '' : ' (under 7h)'}</span></div>
+    <ul class="facts">
+      <li><span>Finish to bed</span><b>${fmtDur(bed)}</b></li>
+      <li><span>Wake to leaving</span><b>${fmtDur(prep)}</b></li>
+    </ul>`;
 }
 
 // Free time: everything not covered by sleep, work (incl. commute and lunch) or timed tasks
@@ -98,7 +101,7 @@ function busyOf(d) {
   const sl = toMin(st.sleepAt), wk = toMin(st.wakeAt);
   if (sl > wk) out.push([sl, 1440], [0, wk]); else out.push([sl, wk]);
   if (!d.off) {
-    const r = calc(d), a = r.start - r.travel, b = r.finish;
+    const r = calc(d), a = r.start - r.cIn, b = r.finish + r.cOut;
     const lo = ((a % 1440) + 1440) % 1440, hi = lo + (b - a);
     if (hi > 1440) out.push([lo, 1440], [0, hi - 1440]); else out.push([lo, hi]);
   }
@@ -130,20 +133,21 @@ function freeSection(d, i, isToday) {
     const isT = iso(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + k)) === iso(new Date());
     freeSlots(wd, isT ? NOW_MIN() : 0).forEach(([a, b]) => { if (b - a >= findDur) hits.push([k, a, b]); });
   });
-  return `<div class="result"><b>${fmtDur(total)}</b> free ${isToday ? 'for the rest of today' : 'this day'}
-      <ul class="slots">${list || '<li class="hint">No free slots.</li>'}</ul></div>
-    <button class="chip" data-sharefree="1">Share my free time this week</button>
-    <div class="card finder">
-      <b>Find time for something</b>
+  return `<div class="stats">${stat('Free', fmtDur(total))}${stat('Gaps', slots.length)}${stat('Longest', fmtDur(Math.max(0, ...slots.map(([a, b]) => b - a))))}</div>
+    <div class="panels">
+    ${panel(isToday ? 'Free for the rest of today' : 'Free this day', `<ul class="slots">${list || '<li class="hint">No free slots.</li>'}</ul>
+      <button class="chip" data-sharefree="1">Share my free time this week</button>`)}
+    ${panel('Find time for something', `<div class="finder">
       <div class="row">
         <label>What <input type="text" id="findText" value="${esc(findText)}" placeholder="e.g. Gym"></label>
         <label style="flex:0 0 100px">How long <select id="findDur">${DURS.map(m => `<option value="${m}" ${m === findDur ? 'selected' : ''}>${fmtDur(m)}</option>`).join('')}</select></label>
       </div>
       <ul class="slots">${hits.map(([k, a, b]) => `<li>${DAYS[k]} <b>${toTime(a)}–${toTime(b)}</b> <span class="hint">(${fmtDur(b - a)} free)</span>
         <button class="chip" data-book="${k}|${a}">Book ${toTime(a)}</button></li>`).join('') || '<li class="hint">Nothing that long free this week.</li>'}</ul>
+    </div>`)}
     </div>
-    <details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>
-    ${taskBlock(d)}`;
+    ${panel('Tasks', taskBlock(d), 'wide')}
+    <details class="panel more wide"><summary>Edit times &amp; travel</summary>${planRows(d)}${optRows(d)}</details>`;
 }
 
 function taskEditor(d, date) {
@@ -172,7 +176,11 @@ function dayView(d, i, date, isToday, free) {
   let svg = `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#e5e9f2" stroke-width="22"/>`;
   const sl = toMin(store.settings.sleepAt), wk = toMin(store.settings.wakeAt);
   svg += sl > wk ? arc(sl, HI, 'seg-sleep', 'sleep') + arc(LO, wk, 'seg-sleep', 'sleep') : arc(sl, wk, 'seg-sleep', 'sleep');
-  if (!d.off) svg += arc(r.start - r.travel, r.start, 'seg-commute') + arc(r.start, ls, 'seg-work', 'work') + arc(ls, ls + r.lunch, 'seg-lunch', 'lunch') + arc(ls + r.lunch, r.finish, 'seg-work', 'work');
+  if (!d.off) svg += arc(r.start - r.cIn, r.start, 'seg-commute') + arc(r.start, ls, 'seg-work', 'work') + arc(ls, ls + r.lunch, 'seg-lunch', 'lunch') + arc(ls + r.lunch, r.finish, 'seg-work', 'work') + arc(r.finish, r.finish + r.cOut, 'seg-commute');
+  if (!d.off) [['workStart', r.start], ['workEnd', r.finish]].forEach(([k, m]) => {
+    const [hx, hy] = pt(ang(m), R);
+    svg += `<circle cx="${hx}" cy="${hy}" r="9" class="handle grab" data-drag="${k}"><title>Drag to change work ${k === 'workStart' ? 'start' : 'finish'}</title></circle>`;
+  });
   if (free) {
     const ir = R - 33;
     freeSlots(d, isToday ? NOW_MIN() : 0).forEach(([a, b]) => {
@@ -227,15 +235,35 @@ function dayView(d, i, date, isToday, free) {
     msg = lines.map(l => `<div>${l}</div>`).join('');
   }
   const mid = free ? `<b>${fmtDur(freeSlots(d, isToday ? NOW_MIN() : 0).reduce((n, [a, b]) => n + b - a, 0))}</b><div>free</div>` : (d.off ? `<b>Day off</b>` : `<b>${toTime(r.start)}–${toTime(r.finish)}</b>${msg}`);
-  return `<section class="day ${isToday ? 'today' : ''}" data-i="${i}">${head}
+  return `<section class="day day-main ${isToday ? 'today' : ''}" data-i="${i}">${head}
     <div class="clock"><svg viewBox="-14 -14 228 228" role="img" aria-label="Day clock">${svg}</svg>
       <div class="clock-mid">${mid}</div></div>
-    <div class="hint" style="text-align:center">Drag work, lunch, sleep or tasks to move them · tap a task to resize it · drag the white dots to resize sleep</div>
-    <div class="legend" style="justify-content:center"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task${free ? ' <i class="free"></i>Free' : ''}</div>
+    <div class="legend"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task${free ? ' <i class="free"></i>Free' : ''}</div>
+    <div class="hint wheelhint">Drag a block to move it · drag the white dots to resize · tap a task to adjust it</div>
     ${taskEditor(d, date)}
-    ${free ? freeSection(d, i, isToday) : `${sleepCheck(r)}
-    ${d.off ? '' : `<details class="more"><summary>Edit times</summary>${planRows(d)}${optRows(d)}</details>`}
-    ${taskBlock(d)}`}</section>`;
+    ${free ? freeSection(d, i, isToday) : workSections(d, r)}</section>`;
+}
+
+const panel = (title, body, cls = '') => `<div class="panel ${cls}"><h3>${title}</h3>${body}</div>`;
+const stat = (label, value, cls = '') => `<div class="stat ${cls}"><small>${label}</small><b>${value}</b></div>`;
+
+function workSections(d, r) {
+  const ls = Math.min(Math.max(toMin(d.lunchAt), r.start), r.finish - r.lunch);
+  const stats = d.off ? '' : `<div class="stats">
+      ${stat('Start', toTime(r.start))}
+      ${stat('Finish', toTime(r.finish))}
+      ${stat('Work', fmtDur(r.required))}
+      ${stat('Lunch', `${toTime(ls)}<span>${r.lunch}m</span>`)}
+      ${r.wfh ? '' : stat('Commute', `${fmtDur(r.cIn)}<span>each way</span>`, 'commute')}
+    </div>`;
+  return `${d.off ? '' : locRow(d)}
+    ${stats}
+    <div class="panels">
+      ${d.off ? '' : panel('Work hours', workExtras(d, r))}
+      ${panel('Sleep', sleepCheck(r))}
+    </div>
+    ${panel('Tasks', taskBlock(d), 'wide')}
+    ${d.off ? '' : `<details class="panel more wide"><summary>Edit times &amp; travel</summary>${planRows(d)}${optRows(d)}</details>`}`;
 }
 
 function personalCard(d, i, date, todayKey) {
@@ -257,20 +285,28 @@ function calc(d) {
   if (d.mode === 'start') { start = t; finish = t + total; }
   else { finish = t; start = t - total; }
   let travel = 0, earned = 0;
-  const a = toMin(d.tFrom), b = toMin(d.tTo);
-  if (a !== null && b !== null) {
+  const a = toMin(d.tFrom), b = toMin(d.tTo), wfh = d.loc === 'wfh';
+  if (!wfh && a !== null && b !== null) {
     travel = (b - a + 1440) % 1440;
     earned = Math.max(0, travel - s.commute);
   }
-  return { adj: d.adj || 0, required, lunch, total, start, finish, travel, earned };
+  // Office days get a commute buffer either side of work (actual travel if logged, else the normal commute)
+  const buffer = wfh ? 0 : (travel || s.commute);
+  return { adj: d.adj || 0, required, lunch, total, start, finish, travel, earned, wfh, cIn: buffer, cOut: buffer };
 }
 
-function statusBar(d, r) {
-  const ls = Math.min(Math.max(toMin(d.lunchAt), r.start), r.finish - r.lunch);
-  const seg = [['commute', r.travel], ['work', ls - r.start], ['lunch', r.lunch], ['work', r.finish - ls - r.lunch]]
-    .filter(x => x[1] > 0);
-  return `<div class="bar">${seg.map(([c, m]) => `<div class="${c}" style="flex:${m}" title="${c} ${fmtDur(m)}"></div>`).join('')}</div>
-    <div class="legend"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch</div>`;
+function locRow(d) {
+  return `<div class="seg" role="group" aria-label="Where are you working?">
+      <button class="${d.loc === 'wfh' ? '' : 'on'}" data-loc="office">Office</button>
+      <button class="${d.loc === 'wfh' ? 'on' : ''}" data-loc="wfh">WFH</button>
+    </div>`;
+}
+
+function workExtras(d, r) {
+  return `<div class="big">${fmtDur(r.required)} <span class="hint">${r.adj ? `(${fmtAdj(r.adj)} vs usual)` : 'usual hours'}</span></div>
+    <input type="range" data-f="adj" min="-240" max="240" step="15" value="${r.adj}" aria-label="Work hours compared with usual">
+    ${r.adj ? `<div class="${r.adj < 0 ? 'warn' : 'earn'}">${r.adj > 0 ? `+${fmtDur(r.adj)} banked` : `${fmtDur(-r.adj)} owed — stay ${fmtDur(-r.adj)} longer another day`}</div>` : ''}
+    ${r.travel ? `<div>Travel ${fmtDur(r.travel)} · <span class="earn">+${fmtDur(r.earned)} banked</span></div>` : ''}`;
 }
 
 function bankTotal(before) {
@@ -282,57 +318,22 @@ function bankTotal(before) {
   return earned - used;
 }
 
-function render() {
+const weekdaySnap = d => {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  while (x.getDay() === 0 || x.getDay() === 6) x.setDate(x.getDate() + 1);
+  return x;
+};
+
+function weekStrip(wk, todayKey) {
+  return `<div class="weekstrip">${wk.slice(0, 5).map((d, i) => {
+    const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+    return `<button class="daypick ${iso(date) === iso(selDay) ? 'on' : ''} ${iso(date) === todayKey ? 'today' : ''} ${d.off ? 'off' : ''}" data-pick="${i}">
+      <b>${DAYS[i]}</b><span>${date.getDate()}</span><small>${d.off ? 'Off' : d.loc === 'wfh' ? 'WFH' : 'Office'}</small></button>`;
+  }).join('')}</div>`;
+}
+
+function weekSummary(wk, key) {
   const s = store.settings;
-  const dayMode = store.view === 'day' || store.view === 'free';
-  const personal = store.view === 'personal';
-  if (dayMode) monday = getMonday(selDay);
-  const key = iso(monday);
-  const wk = weekData(key);
-  const fri = new Date(monday); fri.setDate(fri.getDate() + 6);
-  $('weekLabel').textContent = dayMode
-    ? selDay.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
-    : `${monday.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${fri.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
-
-  document.querySelectorAll('.modes button').forEach(b => b.classList.toggle('on', b.dataset.view === store.view));
-  $('bank').style.display = personal ? 'none' : '';
-  const todayKey = iso(new Date());
-  if (dayMode) {
-    const i = (selDay.getDay() + 6) % 7;
-    $('days').innerHTML = dayView(wk[i], i, selDay, iso(selDay) === todayKey, store.view === 'free');
-    $('summary').innerHTML = '';
-    return updateBank();
-  }
-  $('days').innerHTML = wk.map((d, i) => {
-    const date = new Date(monday); date.setDate(date.getDate() + i);
-    const r = calc(d);
-    const lunchStart = toMin(d.lunchAt);
-    const wPct = r.total ? (r.required / r.total * 100) : 100;
-    if (personal) return personalCard(d, i, date, todayKey);
-    const cuts = [0, 15, 20, 30].filter(c => c <= s.lunch);
-    return `<section class="day ${d.off ? 'off' : ''} ${iso(date) === todayKey ? 'today' : ''}" data-i="${i}">
-      <h2>${DAYS[i]} ${date.getDate()}/${date.getMonth() + 1}
-        <label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" style="width:auto" data-f="off" ${d.off ? 'checked' : ''}> Off</label></h2>
-      ${d.off ? '' : `
-      ${planRows(d)}
-      <div class="row"><label style="flex:1">Work ${fmtAdj(d.adj || 0)} vs usual
-        <input type="range" data-f="adj" min="-240" max="240" step="15" value="${d.adj || 0}"></label></div>
-      <details class="more" ${(d.cut || d.tFrom || d.tTo || d.use) ? 'open' : ''}><summary>Lunch &amp; travel options</summary>${optRows(d, cuts)}</details>
-      ${statusBar(d, r)}
-      <div class="result">
-        ${toTime(r.start)} → <b>${toTime(r.finish)}</b> · work ${fmtDur(r.required)} · lunch ${toTime(lunchStart)}–${toTime(lunchStart + r.lunch)} (${r.lunch}m)
-        ${r.adj ? `<div class="${r.adj < 0 ? 'warn' : 'earn'}">${r.adj > 0 ? `+${fmtDur(r.adj)} banked` : `${fmtDur(-r.adj)} owed — stay ${fmtDur(-r.adj)} longer another day`}</div>` : ''}
-        ${r.travel ? `<div>Travel ${fmtDur(r.travel)} · <span class="earn">+${fmtDur(r.earned)} banked</span></div>` : ''}
-      </div>`}
-      ${taskBlock(d)}
-    </section>`;
-  }).join('');
-
-  if (personal) {
-    const all = wk.flatMap(d => d.tasks);
-    $('summary').innerHTML = `This week: <b>${all.filter(t => t.done).length}/${all.length}</b> tasks done`;
-    return;
-  }
   const active = wk.filter(d => !d.off);
   const weekEarned = active.reduce((n, d) => n + calc(d).earned, 0);
   const weekUsed = active.reduce((n, d) => n + (d.use || 0), 0);
@@ -342,12 +343,39 @@ function render() {
   const net = weekEarned + weekAdj - weekUsed;
   const bf = bankTotal(key);
   const diff = weekWork + weekUsed - weekAdj - target;
-  $('summary').innerHTML = `<b>Week check</b>
+  return `<b>Week check</b>
     <div>Target ${fmtDur(target)} (${active.length} days) · to work <b>${fmtDur(weekWork)}</b> + banked time used ${fmtDur(weekUsed)}
       · <span class="${diff ? 'warn' : 'earn'}">${diff ? (diff > 0 ? 'over by ' : 'short by ') + fmtDur(Math.abs(diff)) : 'on target'}</span></div>
     <div>Bank: ${fmtDur(bf)} brought forward · this week <span class="${net < 0 ? 'warn' : 'earn'}">${net >= 0 ? '+' : ''}${fmtDur(net)}</span> · carried forward <b>${fmtDur(bf + net)}</b></div>
     ${bf + net < 0 ? `<div class="warn">You owe ${fmtDur(-(bf + net))} — stay ${fmtDur(-(bf + net))} longer to make it up.</div>` : ''}`;
+}
 
+function planAhead(wk, selIdx, todayKey) {
+  const cards = wk.map((d, i) => i === selIdx ? '' : personalCard(d, i, new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i), todayKey)).join('');
+  return `<h3 class="planhead">Plan ahead this week</h3>${cards}`;
+}
+
+function render() {
+  const free = store.view === 'free';
+  // Work is Monday to Friday; free time covers every day
+  if (!free) selDay = weekdaySnap(selDay);
+  monday = getMonday(selDay);
+  const key = iso(monday);
+  const wk = weekData(key);
+  const todayKey = iso(new Date());
+  $('weekLabel').textContent = selDay.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  document.querySelectorAll('.modes button').forEach(b => b.classList.toggle('on', b.dataset.view === store.view));
+  $('bank').style.display = free ? 'none' : '';
+  const i = (selDay.getDay() + 6) % 7;
+  const dayHtml = dayView(wk[i], i, selDay, iso(selDay) === todayKey, free);
+  if (free) {
+    $('days').innerHTML = dayHtml + planAhead(wk, i, todayKey);
+    const all = wk.flatMap(d => d.tasks);
+    $('summary').innerHTML = `This week: <b>${all.filter(t => t.done).length}/${all.length}</b> tasks done`;
+  } else {
+    $('days').innerHTML = weekStrip(wk, todayKey) + dayHtml;
+    $('summary').innerHTML = weekSummary(wk, key);
+  }
   updateBank();
 }
 function updateBank() {
@@ -390,6 +418,11 @@ $('days').addEventListener('change', e => {
 $('days').addEventListener('input', e => { if (e.target.id === 'findText') findText = e.target.value; });
 $('days').addEventListener('change', e => { if (e.target.id === 'findDur') { findDur = Number(e.target.value); render(); } });
 $('days').addEventListener('click', e => {
+  const pk = e.target.closest('[data-pick]');
+  if (pk) {
+    selDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + Number(pk.dataset.pick));
+    selTask = null; return render();
+  }
   if (e.target.dataset.share !== undefined) return shareTask(Number(e.target.closest('.day').dataset.i), Number(e.target.dataset.share));
   if (e.target.dataset.sharefree) return shareFree();
   if (e.target.dataset.tdoneSel) { selTask = null; return render(); }
@@ -413,6 +446,11 @@ $('days').addEventListener('click', e => {
     if (e.target.dataset.add) return addTask(day, d);
     if (e.target.dataset.del) { d.tasks.splice(Number(e.target.dataset.del), 1); selTask = null; save(); return render(); }
   }
+  const lc = e.target.closest('[data-loc]');
+  if (lc) {
+    weekData(iso(monday))[lc.closest('.day').dataset.i].loc = lc.dataset.loc;
+    save(); return render();
+  }
   const c = e.target.closest('[data-cut]'); if (!c) return;
   weekData(iso(monday))[c.closest('.day').dataset.i].cut = Number(c.dataset.cut);
   save(); render();
@@ -430,17 +468,30 @@ $('days').addEventListener('pointerdown', e => {
   const day = weekData(iso(monday))[(selDay.getDay() + 6) % 7];
   const st = store.settings, kind = el.dataset.drag;
   const task = el.dataset.k !== undefined ? day.tasks[Number(el.dataset.k)] : null;
-  drag = { kind, task, moved: false, box, day, from: dialMin(e, box), a: toMin(kind === 'work' ? day.time : kind === 'lunch' ? day.lunchAt : task ? task.time : st.sleepAt), dur: task ? (task.dur || 60) : 0, b: toMin(st.wakeAt) };
+  drag = { kind, task, moved: false, box, day, last: dialMin(e, box), totalDelta: 0, work: calc(day), adj: day.adj || 0, a: toMin(kind === 'work' ? day.time : kind === 'lunch' ? day.lunchAt : task ? task.time : st.sleepAt), dur: task ? (task.dur || 60) : 0, b: toMin(st.wakeAt) };
   $('days').setPointerCapture(e.pointerId);
   e.preventDefault();
 });
 window.addEventListener('pointermove', e => {
   if (!drag) return;
   const step = store.exact ? 1 : 15;
-  const delta = Math.round((((dialMin(e, drag.box) - drag.from + 2160) % 1440) - 720) / step) * step;
+  const current = dialMin(e, drag.box);
+  drag.totalDelta += ((current - drag.last + 2160) % 1440) - 720;
+  drag.last = current;
+  const delta = Math.round(drag.totalDelta / step) * step;
   const mv = m => toTime(m + delta);
   if (delta) drag.moved = true;
   if (drag.kind === 'work') drag.day.time = mv(drag.a);
+  else if (drag.kind === 'workStart') {
+    const change = Math.max(-drag.work.start, Math.min(drag.work.required, 1440 - step - drag.work.start, delta));
+    drag.day.adj = drag.adj - change;
+    if (drag.day.mode === 'start') drag.day.time = toTime(drag.work.start + change);
+  }
+  else if (drag.kind === 'workEnd') {
+    const change = Math.max(-drag.work.required, Math.min(1440 - step - drag.work.finish, delta));
+    drag.day.adj = drag.adj + change;
+    if (drag.day.mode === 'finish') drag.day.time = toTime(drag.work.finish + change);
+  }
   else if (drag.kind === 'taskEnd') drag.task.dur = Math.max(step, Math.min(1440 - drag.a, drag.dur + delta));
   else if (drag.kind === 'taskStart') {
     const ns = Math.max(0, Math.min(drag.a + drag.dur - step, drag.a + delta));
@@ -476,9 +527,9 @@ for (const k of Object.keys(DEFAULTS)) {
 
 // Week nav
 const shift = n => {
-  if (store.view === 'day' || store.view === 'free') selDay = new Date(selDay.getFullYear(), selDay.getMonth(), selDay.getDate() + n);
-  else monday.setDate(monday.getDate() + 7 * n);
-  render();
+  const d = new Date(selDay.getFullYear(), selDay.getMonth(), selDay.getDate() + n);
+  while (store.view !== 'free' && (d.getDay() === 0 || d.getDay() === 6)) d.setDate(d.getDate() + n);
+  selDay = d; render();
 };
 $('prev').onclick = () => shift(-1);
 $('next').onclick = () => shift(1);
@@ -488,19 +539,24 @@ $('today').onclick = () => { monday = getMonday(new Date()); selDay = new Date()
 let touchX = null;
 $('days').addEventListener('touchstart', e => { touchX = e.target.closest('[data-drag]') ? null : e.touches[0].clientX; }, { passive: true });
 $('days').addEventListener('touchend', e => {
-  if (touchX === null || (store.view !== 'day' && store.view !== 'free')) return;
+  if (touchX === null) return;
   const dx = e.changedTouches[0].clientX - touchX; touchX = null;
   if (Math.abs(dx) > 70) shift(dx < 0 ? 1 : -1);
 });
 $('days').addEventListener('click', e => {
   const h = e.target.closest('h2');
-  if (!h || store.view === 'day' || store.view === 'free' || e.target.closest('label')) return;
+  if (!h || store.view !== 'free' || e.target.closest('label')) return;
   selDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + Number(h.closest('.day').dataset.i));
-  store.view = 'day'; save(); render();
+  selTask = null; render();
 });
-setInterval(() => {
-  if ((store.view === 'day' || store.view === 'free') && !document.activeElement.matches('input, select')) render();
-}, 60000);
+// Keep the clock live: refresh on each minute boundary and when the tab or app returns to the foreground
+const liveTick = () => { if (!drag && !document.activeElement.matches('input, select')) render(); };
+const scheduleTick = () => setTimeout(() => { liveTick(); scheduleTick(); }, 60000 - (Date.now() % 60000) + 50);
+scheduleTick();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) liveTick(); });
+window.addEventListener('focus', liveTick);
+window.addEventListener('pageshow', liveTick);
+document.addEventListener('focusout', () => setTimeout(liveTick, 0));
 $('reset').onclick = () => {
   if (confirm('Clear this week?')) { delete store.weeks[iso(monday)]; save(); render(); }
 };
@@ -533,7 +589,10 @@ function buildEvents() {
     const id = iso(date).replace(/-/g, '');
     if (!d.off) {
       const r = calc(d), ls = Math.min(Math.max(toMin(d.lunchAt), r.start), r.finish - r.lunch);
-      if (sel.commute && r.travel) add(`commute-${id}`, date, r.start - r.travel, r.start, 'Commute');
+      if (sel.commute) {
+        add(`commute-${id}-in`, date, r.start - r.cIn, r.start, 'Commute');
+        add(`commute-${id}-out`, date, r.finish, r.finish + r.cOut, 'Commute');
+      }
       if (sel.work) {
         add(`work-${id}-a`, date, r.start, ls, 'Work');
         add(`work-${id}-b`, date, ls + r.lunch, r.finish, 'Work', `Finish ${toTime(r.finish)}`);

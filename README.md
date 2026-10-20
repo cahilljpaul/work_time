@@ -20,22 +20,21 @@ It is a single static web page (plain HTML, CSS and JavaScript). There is no bui
 
 ## Views (tabs)
 
-- **Today**: the 24-hour wheel for one day. Arrows or swiping move between days.
-- **Free time**: the same wheel with a green ring showing free gaps, a list of gaps with suggestions, and a finder that lists gaps long enough for a task and can book one.
-- **Work**: the full week, one card per day with a colour-coded status bar. Tap a day heading to open it on the wheel.
-- **Personal / projects**: the week as task lists.
+- **Calendar** (Monday to Friday): a day picker for the week, then the 24-hour wheel as the main focus. Below it are the Office / WFH switch, key times for the day (start, finish, work, lunch, commute), then cards for work hours, sleep, tasks and time editing. The week check follows. Arrows or swiping move between weekdays.
+- **Free time / projects**: the wheel with a green ring showing free gaps, a list of gaps with suggestions, a finder that lists gaps long enough for a task and can book one, and the rest of the week (including weekends) as task lists to plan ahead. Tap a day heading to open it on the wheel.
 
 ## The wheel
 
 - Midnight is at the top. It is a true 24 hours, with notches every hour.
 - Colours: purple commute, blue work, orange lunch, pale lilac sleep, red tasks, green free time.
 - A "now" hand shows the current time (today only), plus a marker one hour ahead.
-- **Drag** work, lunch, sleep or a task to move it. Snaps to 15 minutes, or 1 minute with "Exact minutes" on.
+- **Drag** work, lunch, sleep or a task to move it. Drag the white work dots to resize the workday; tap a task to show its resize dots. Changes snap to 15 minutes, or 1 minute with "Exact minutes" on.
 - **Sleep** has two white dots to set bedtime and wake time separately.
 - **Tap a task** to select it. Drag its end dots, or use the −15 / +15 / +1 h buttons, to change how long it runs.
 
 ## Features
 
+- **Office / WFH** per day. Office adds a faded commute buffer before and after work (your normal commute, or the logged travel time); WFH shows only the work block and no commute. Commute buffers count as busy time, in the sleep check and in the calendar export.
 - Plan each day by start time or finish time, with lunch length, lunch start and an option to eat into lunch.
 - Weekends are off by default.
 - **Time bank**: travel to an alternative office beyond your normal commute is banked. You can spend banked time to shorten a day. The balance carries across weeks.

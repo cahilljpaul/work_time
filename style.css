@@ -40,15 +40,15 @@ button.chip.on { background:var(--accent); color:#fff; border-color:var(--accent
 .bar .commute, .legend .commute { background:#8b5cf6; }
 .bar .work, .legend .work { background:var(--accent); }
 .bar .lunch, .legend .lunch { background:#f59e0b; }
-.legend { font-size:.7rem; color:#667; display:flex; gap:4px; align-items:center; margin-bottom:6px; }
+.legend { font-size:.75rem; color:#667; display:flex; flex-wrap:wrap; justify-content:center; gap:4px; align-items:center; margin-bottom:6px; }
 .legend i { width:9px; height:9px; border-radius:50%; display:inline-block; margin-left:6px; }
 .warn { color:var(--warn); font-weight:600; }
 .day h2 { cursor:pointer; }
-.clock { position:relative; max-width:300px; margin:0 auto; }
+.clock { position:relative; width:min(100%, 480px); margin:4px auto 8px; }
 .clock svg { width:100%; display:block; }
-.clock-mid { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-size:.8rem; color:#556; padding:0 22%; }
-.clock-mid b { font-size:1.1rem; color:var(--ink); margin-bottom:2px; }
-.seg-commute { stroke:#8b5cf6; } .seg-work { stroke:var(--accent); } .seg-lunch { stroke:#f59e0b; }
+.clock-mid { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-size:clamp(.8rem, 2.6vw, 1rem); color:#556; padding:0 24%; }
+.clock-mid b { font-size:clamp(1.1rem, 4.6vw, 1.7rem); color:var(--ink); margin-bottom:2px; }
+.seg-commute { stroke:#8b5cf6; opacity:.25; } .seg-work { stroke:var(--accent); } .seg-lunch { stroke:#f59e0b; }
 .tick { font-size:8px; fill:#889; }
 .now { stroke:var(--ink); stroke-width:2; stroke-linecap:round; }
 .legend i.task { background:#ef4444; }
@@ -74,3 +74,39 @@ button.chip.on { background:var(--accent); color:#fff; border-color:var(--accent
 .handle.task { stroke:#dc2626; }
 .chk { flex-direction:row; align-items:center; gap:5px; font-size:.9rem; color:var(--ink); }
 .chk input { width:auto; }
+.weekstrip { display:flex; gap:6px; margin:0 0 10px; }
+.daypick { flex:1; display:flex; flex-direction:column; align-items:center; gap:1px; padding:6px 2px; }
+.daypick span { font-size:1rem; font-weight:600; }
+.daypick small { font-size:.65rem; color:#667; }
+.daypick.today { border-color:var(--accent); }
+.daypick.off { opacity:.5; }
+.daypick.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+.daypick.on small { color:#dbe5ff; }
+.planhead { margin:16px 0 8px; font-size:1rem; }
+.day-main { padding:16px; }
+.day h2 { font-size:1.25rem; }
+.wheelhint { text-align:center; margin:6px 0 16px; line-height:1.5; }
+.day-main .legend { gap:6px 10px; margin:10px 0 6px; }
+.day-main .legend i { margin-left:0; margin-right:4px; }
+.seg { display:flex; width:fit-content; margin:4px auto 14px; border:1px solid var(--line); border-radius:999px; overflow:hidden; background:#fff; }
+.seg button { border:0; border-radius:0; padding:8px 26px; font-weight:600; color:#556; }
+.seg button.on { background:var(--accent); color:#fff; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(90px, 1fr)); gap:10px; margin:16px 0; }
+.stat { background:#f5f7fb; border-radius:12px; padding:12px 8px; text-align:center; }
+.stat small { display:block; font-size:.7rem; letter-spacing:.04em; text-transform:uppercase; color:#778; margin-bottom:6px; }
+.stat b { display:block; font-size:1.2rem; line-height:1.2; }
+.stat b span { display:block; font-size:.7rem; font-weight:400; color:#778; margin-top:2px; }
+.stat.commute b { color:#7c3aed; }
+.panels { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-bottom:12px; }
+.panel { background:#f9fafd; border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+.panel h3, .panel > summary { margin:0 0 8px; font-size:.8rem; letter-spacing:.04em; text-transform:uppercase; color:#778; font-weight:700; }
+.panel.wide { margin-bottom:12px; }
+.panel .big { font-size:1.35rem; font-weight:700; margin-bottom:8px; }
+.panel input[type=range] { padding:0; margin:4px 0 8px; }
+.facts { list-style:none; padding:0; margin:0; }
+.facts li { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line); font-size:.9rem; }
+.facts li:last-child { border-bottom:0; }
+.facts span { color:#667; }
+.panel.more > summary { margin:0; }
+.panel.more[open] > summary { margin-bottom:8px; }
+.taskedit { text-align:center; margin:0 0 12px; }
