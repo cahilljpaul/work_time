@@ -10,7 +10,7 @@ function applyStep() { document.querySelectorAll('input[type=time]').forEach(i =
 const save = () => {
   store.updatedAt = Date.now();
   localStorage.setItem('worktime', JSON.stringify(store));
-  if (window.cloudChanged) window.cloudChanged();
+  try { if (window.cloudChanged) window.cloudChanged(); } catch (err) { console.error(err); }
 };
 
 let monday = getMonday(new Date());
