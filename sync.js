@@ -68,6 +68,78 @@ async function pushCloud() {
   const { error } = await cloud.client.from('user_data')
     .upsert({ user_id: cloud.user.id, data: payload, updated_at: new Date(at).toISOString() });
   msg(error ? 'Sync problem: ' + error.message : 'Saved to your account.');
+  if (!error) syncShares();
+}
+
+// ---- Task sharing (view only). Shares are read-only snapshots addressed by email. ----
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+function findTasks() {
+  const map = {};
+  Object.entries(store.weeks).forEach(([wk, days]) => {
+    const [y, m, d] = wk.split('-').map(Number);
+    days.forEach((day, i) => (day.tasks || []).forEach(t => {
+      if (t.id) map[t.id] = { text: t.text, date: iso(new Date(y, m - 1, d + i)), time: t.time || '', dur: t.dur || 60, done: !!t.done };
+    }));
+  });
+  return map;
+}
+
+window.sendShare = async (dayIdx, k) => {
+  if (!cloud.user) return alert('Sign in under Account & sync first.');
+  const t = weekData(iso(monday))[dayIdx].tasks[k];
+  const to = (prompt('Share "' + t.text + '" (view only) with which email?') || '').trim().toLowerCase();
+  if (!to) return;
+  if (!EMAIL_RE.test(to) || to === (cloud.user.email || '').toLowerCase()) return alert('Enter another person\'s email address.');
+  if (!t.id) { t.id = crypto.randomUUID(); save(); }
+  const snap = findTasks()[t.id];
+  const { error } = await cloud.client.from('shares').upsert({
+    owner_id: cloud.user.id, owner_email: cloud.user.email.toLowerCase(),
+    recipient_email: to, task_id: t.id, task: snap, updated_at: new Date().toISOString()
+  }, { onConflict: 'owner_id,recipient_email,task_id' });
+  msg(error ? 'Could not share: ' + error.message : 'Shared with ' + to + '. They will see it once signed in with that email.');
+  loadShares();
+};
+
+// Keep recipients' copies current; remove shares whose task was deleted.
+async function syncShares() {
+  const { data, error } = await cloud.client.from('shares').select('id,task_id,task').eq('owner_id', cloud.user.id);
+  if (error || !data || !data.length) return loadShares();
+  const tasks = findTasks();
+  for (const s of data) {
+    const cur = tasks[s.task_id];
+    if (!cur) await cloud.client.from('shares').delete().eq('id', s.id);
+    else if (JSON.stringify(cur) !== JSON.stringify(s.task)) {
+      await cloud.client.from('shares').update({ task: cur, updated_at: new Date().toISOString() }).eq('id', s.id);
+    }
+  }
+  loadShares();
+}
+
+async function loadShares() {
+  const box = $('shares');
+  box.textContent = '';
+  if (!cloud.user) return;
+  const { data, error } = await cloud.client.from('shares').select('id,owner_id,owner_email,recipient_email,task').order('created_at', { ascending: false });
+  if (error) { box.textContent = 'Could not load shares: ' + error.message; return; }
+  const mine = data.filter(s => s.owner_id === cloud.user.id), theirs = data.filter(s => s.owner_id !== cloud.user.id);
+  const section = (title, rows, label, who) => {
+    const h = document.createElement('h3'); h.textContent = title; box.appendChild(h);
+    if (!rows.length) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = 'Nothing yet.'; box.appendChild(p); return; }
+    const ul = document.createElement('ul'); ul.className = 'tasks';
+    rows.forEach(s => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      const t = s.task || {};
+      span.textContent = `${t.date || ''} ${t.time || ''} ${t.text || ''} (${fmtDur(t.dur || 60)})${t.done ? ' ✓' : ''} · ${who(s)}`;
+      const b = document.createElement('button'); b.className = 'chip'; b.textContent = label;
+      b.onclick = async () => { await cloud.client.from('shares').delete().eq('id', s.id); loadShares(); };
+      li.append(span, b); ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  };
+  section('Shared with me', theirs, 'Remove', s => 'from ' + s.owner_email);
+  section('Shared by me', mine, 'Stop sharing', s => 'to ' + s.recipient_email);
 }
 
 // Called by app.js after every local save.
@@ -84,8 +156,8 @@ window.cloudChanged = () => {
     const was = cloud.user && cloud.user.id;
     cloud.user = session ? session.user : null;
     authUI();
-    if (cloud.user && cloud.user.id !== was) setTimeout(pullCloud, 0);
-    if (!cloud.user) msg('');
+    if (cloud.user && cloud.user.id !== was) setTimeout(() => { pullCloud(); loadShares(); }, 0);
+    if (!cloud.user) { msg(''); $('shares').textContent = ''; }
   });
   authUI();
 })();

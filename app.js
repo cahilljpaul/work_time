@@ -57,7 +57,7 @@ function taskBlock(d) {
       ${d.tasks.map((t, k) => `<li class="${t.done ? 'done' : ''}">
         <input type="checkbox" style="width:auto" data-tdone="${k}" ${t.done ? 'checked' : ''}>
         <span>${t.time ? `<b>${t.time}</b> ` : ''}${esc(t.text)}${t.time ? ` <small class="hint">${fmtDur(t.dur || 60)}</small>` : ''}</span>
-        ${t.time ? `<button class="chip" data-share="${k}" aria-label="Share">Share</button>` : ''}<button class="chip" data-del="${k}" aria-label="Delete">&times;</button></li>`).join('')}
+        ${t.time ? `<button class="chip" data-share="${k}" aria-label="Share">Share</button><button class="chip" data-sendto="${k}" aria-label="Send to a user">Send</button>` : ''}<button class="chip" data-del="${k}" aria-label="Delete">&times;</button></li>`).join('')}
     </ul>
     <div class="row">
       <label>Goal / project <input type="text" class="newtext" placeholder="e.g. Build habit-tracker app"></label>
@@ -427,6 +427,7 @@ $('days').addEventListener('click', e => {
     selDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + Number(pk.dataset.pick));
     selTask = null; return render();
   }
+  if (e.target.dataset.sendto !== undefined) return window.sendShare && window.sendShare(Number(e.target.closest('.day').dataset.i), Number(e.target.dataset.sendto));
   if (e.target.dataset.share !== undefined) return shareTask(Number(e.target.closest('.day').dataset.i), Number(e.target.dataset.share));
   if (e.target.dataset.sharefree) return shareFree();
   if (e.target.dataset.tdoneSel) { selTask = null; return render(); }
