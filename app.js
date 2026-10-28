@@ -61,6 +61,7 @@ function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 
 const DURS = [15, 30, 45, 60, 90, 120, 180];
 let findDur = 60, findText = '', selTask = null;
+let inspectedSegment = null;
 
 function taskBlock(d) {
   return `    <ul class="tasks">
@@ -173,6 +174,43 @@ function taskEditor(d, date) {
     <div class="hint">Drag the white dots on the wheel to change the start or end</div></div>`;
 }
 
+function segmentDetail(d, date) {
+  const selected = inspectedSegment;
+  if (!selected || selected.day !== iso(date)) return '';
+  let title = '', detail = '', from = selected.from, to = selected.to;
+  if (selected.kind === 'task') {
+    const task = d.tasks[selected.taskIndex];
+    if (!task || !task.time) return '';
+    from = toMin(task.time);
+    to = Math.min(1440, from + (task.dur || 60));
+    title = task.text;
+    detail = `Task · ${task.done ? 'completed' : 'planned'}`;
+  } else if (selected.kind === 'sleep') {
+    from = toMin(store.settings.sleepAt);
+    to = toMin(store.settings.wakeAt);
+    title = 'Sleep';
+    detail = `${store.settings.sleepAt}–${store.settings.wakeAt} · ${fmtDur((to - from + 1440) % 1440)}`;
+  } else {
+    title = ({
+      work: 'Work',
+      lunch: 'Lunch',
+      commute: 'Commute',
+      free: 'Free time'
+    })[selected.kind] || selected.kind;
+    if (selected.kind === 'work') detail = `${selected.part} · ${d.loc === 'wfh' ? 'Work from home' : 'Office'}`;
+    else if (selected.kind === 'commute') detail = `${selected.part} commute`;
+    else if (selected.kind === 'lunch') detail = 'Break';
+    else detail = 'Available time';
+  }
+  const range = selected.kind === 'sleep' ? '' : `${toTime(from)}–${toTime(to)}`;
+  const duration = selected.kind === 'sleep' ? '' : fmtDur(Math.max(0, to - from));
+  return `<div class="segment-detail" role="status" aria-live="polite">
+    <div><small>${esc(detail)}</small><b>${esc(title)}</b>
+      ${range ? `<span>${range} <i>·</i> ${duration}</span>` : ''}</div>
+    <button type="button" class="segment-detail-close" data-clear-inspect aria-label="Close segment details">&times;</button>
+  </div>`;
+}
+
 const NOW_MIN = () => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); };
 function dayView(d, i, date, isToday, free) {
   const head = `<h2>${date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -181,16 +219,22 @@ function dayView(d, i, date, isToday, free) {
   const LO = 0, HI = 1440, C = 100, R = 82;
   const ang = m => (Math.min(Math.max(m, LO), HI) - LO) / (HI - LO) * 2 * Math.PI;
   const pt = (a, rad) => [C + rad * Math.sin(a), C - rad * Math.cos(a)];
-  const arc = (m1, m2, cls, drag) => {
+  const arc = (m1, m2, cls, drag, kind, part = '') => {
     if (m2 - m1 <= 0) return '';
     const a1 = ang(m1), a2 = ang(m2), [x1, y1] = pt(a1, R), [x2, y2] = pt(a2, R);
-    return `<path class="${cls}${drag ? ' grab' : ''}"${drag ? ` data-drag="${drag}"` : ''} d="M${x1} ${y1} A${R} ${R} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="22"/>`;
+    return `<path class="${cls}${drag ? ' grab' : ''} inspectable" data-inspect="${kind}" data-from="${m1}" data-to="${m2}" data-part="${esc(part)}" role="button" tabindex="0" aria-label="Show ${esc(kind)} details"${drag ? ` data-drag="${drag}"` : ''} d="M${x1} ${y1} A${R} ${R} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="22"><title>${esc(part ? `${kind}: ${part}` : kind)}</title></path>`;
   };
   const ls = Math.min(Math.max(toMin(d.lunchAt), r.start), r.finish - r.lunch);
   let svg = `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#e5e9f2" stroke-width="22"/>`;
   const sl = toMin(store.settings.sleepAt), wk = toMin(store.settings.wakeAt);
-  svg += sl > wk ? arc(sl, HI, 'seg-sleep', 'sleep') + arc(LO, wk, 'seg-sleep', 'sleep') : arc(sl, wk, 'seg-sleep', 'sleep');
-  if (!d.off) svg += arc(r.start - r.cIn, r.start, 'seg-commute') + arc(r.start, ls, 'seg-work', 'work') + arc(ls, ls + r.lunch, 'seg-lunch', 'lunch') + arc(ls + r.lunch, r.finish, 'seg-work', 'work') + arc(r.finish, r.finish + r.cOut, 'seg-commute');
+  svg += sl > wk ? arc(sl, HI, 'seg-sleep', '', 'sleep') + arc(LO, wk, 'seg-sleep', '', 'sleep') : arc(sl, wk, 'seg-sleep', '', 'sleep');
+  if (!d.off) {
+    svg += arc(r.start - r.cIn, r.start, 'seg-commute', '', 'commute', 'To work')
+      + arc(r.start, ls, 'seg-work', 'work', 'work', 'Before lunch')
+      + arc(ls, ls + r.lunch, 'seg-lunch', 'lunch', 'lunch')
+      + arc(ls + r.lunch, r.finish, 'seg-work', 'work', 'work', 'After lunch')
+      + arc(r.finish, r.finish + r.cOut, 'seg-commute', '', 'commute', 'From work');
+  }
   if (!d.off) [['workStart', r.start], ['workEnd', r.finish]].forEach(([k, m]) => {
     const [hx, hy] = pt(ang(m), R);
     svg += `<circle cx="${hx}" cy="${hy}" r="9" class="handle grab" data-drag="${k}"><title>Drag to change work ${k === 'workStart' ? 'start' : 'finish'}</title></circle>`;
@@ -199,7 +243,7 @@ function dayView(d, i, date, isToday, free) {
     const ir = R - 33;
     freeSlots(d, isToday ? NOW_MIN() : 0).forEach(([a, b]) => {
       const a1 = ang(a), a2 = ang(b), [x1, y1] = pt(a1, ir), [x2, y2] = pt(a2, ir);
-      svg += `<path class="seg-free" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="10"><title>${toTime(a)}–${toTime(b)} free</title></path>`;
+      svg += `<path class="seg-free inspectable" data-inspect="free" data-from="${a}" data-to="${b}" role="button" tabindex="0" aria-label="Show free time details" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="10"><title>${toTime(a)}–${toTime(b)} free</title></path>`;
     });
   }
   [['sleepStart', sl], ['sleepEnd', wk]].forEach(([k, m]) => {
@@ -220,7 +264,7 @@ function dayView(d, i, date, isToday, free) {
     if (e <= a) return;
     const a1 = ang(a), a2 = ang(e), [x1, y1] = pt(a1, ir), [x2, y2] = pt(a2, ir);
     const sel = selTask && selTask.day === iso(date) && selTask.k === k;
-    svg += `<path class="seg-task${t.done ? ' done' : ''}${sel ? ' sel' : ''} grab" data-drag="task" data-k="${k}" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="14"><title>${esc(t.time + ' ' + t.text)}</title></path>`;
+    svg += `<path class="seg-task${t.done ? ' done' : ''}${sel ? ' sel' : ''} grab inspectable" data-drag="task" data-inspect="task" data-k="${k}" data-from="${a}" data-to="${e}" role="button" tabindex="0" aria-label="Show task details for ${esc(t.text)}" d="M${x1} ${y1} A${ir} ${ir} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke-width="14"><title>${esc(t.time + ' ' + t.text)}</title></path>`;
     if (sel) svg += [['taskStart', x1, y1], ['taskEnd', x2, y2]].map(([kind, hx, hy]) => `<circle cx="${hx}" cy="${hy}" r="8" class="handle task grab" data-drag="${kind}" data-k="${k}"/>`).join('');
   });
   let msg = '';
@@ -252,8 +296,9 @@ function dayView(d, i, date, isToday, free) {
   return `<section class="day day-main ${isToday ? 'today' : ''}" data-i="${i}">${head}
     <div class="clock"><svg viewBox="-14 -14 228 228" role="img" aria-label="Day clock">${svg}</svg>
       <div class="clock-mid">${mid}</div></div>
+    ${segmentDetail(d, date)}
     <div class="legend"><i class="commute"></i>Commute <i class="work"></i>Work <i class="lunch"></i>Lunch <i class="sleep"></i>Sleep <i class="task"></i>Task${free ? ' <i class="free"></i>Free' : ''}</div>
-    <div class="hint wheelhint">Drag a block to move it · drag the white dots to resize · tap a task to adjust it</div>
+    <div class="hint wheelhint">Tap a segment for details · drag a block to move it · drag the white dots to resize</div>
     ${taskEditor(d, date)}
     ${free ? freeSection(d, i, isToday) : workSections(d, r)}</section>`;
 }
@@ -410,6 +455,21 @@ function updateBank() {
   $('bank').classList.toggle('neg', bank < 0);
 }
 
+function selectSegment(el) {
+  const kind = el.dataset.inspect;
+  const taskIndex = kind === 'task' ? Number(el.dataset.k) : null;
+  inspectedSegment = {
+    day: iso(selDay),
+    kind,
+    from: Number(el.dataset.from),
+    to: Number(el.dataset.to),
+    part: el.dataset.part || '',
+    taskIndex
+  };
+  selTask = kind === 'task' ? { day: iso(selDay), k: taskIndex } : null;
+  render();
+}
+
 // Day interactions (event delegation)
 function addTask(day, d) {
   const text = day.querySelector('.newtext').value.trim();
@@ -451,6 +511,11 @@ $('days').addEventListener('change', e => {
 $('days').addEventListener('input', e => { if (e.target.id === 'findText') findText = e.target.value; });
 $('days').addEventListener('change', e => { if (e.target.id === 'findDur') { findDur = Number(e.target.value); render(); } });
 $('days').addEventListener('click', e => {
+  if (e.target.closest('[data-clear-inspect]')) {
+    inspectedSegment = null; return render();
+  }
+  const inspectable = e.target.closest('[data-inspect]');
+  if (inspectable) return selectSegment(inspectable);
   const pk = e.target.closest('[data-pick]');
   if (pk) {
     selDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + Number(pk.dataset.pick));
@@ -502,7 +567,20 @@ $('days').addEventListener('pointerdown', e => {
   const day = weekData(iso(monday))[(selDay.getDay() + 6) % 7];
   const st = store.settings, kind = el.dataset.drag;
   const task = el.dataset.k !== undefined ? day.tasks[Number(el.dataset.k)] : null;
-  drag = { kind, task, moved: false, box, day, last: dialMin(e, box), totalDelta: 0, work: calc(day), adj: day.adj || 0, a: toMin(kind === 'work' ? day.time : kind === 'lunch' ? day.lunchAt : task ? task.time : st.sleepAt), dur: task ? (task.dur || 60) : 0, b: toMin(st.wakeAt) };
+  const inspectable = el.closest('[data-inspect]');
+  drag = {
+    kind, task, moved: false, box, day, last: dialMin(e, box), totalDelta: 0,
+    work: calc(day), adj: day.adj || 0,
+    a: toMin(kind === 'work' ? day.time : kind === 'lunch' ? day.lunchAt : task ? task.time : st.sleepAt),
+    dur: task ? (task.dur || 60) : 0, b: toMin(st.wakeAt),
+    inspect: inspectable ? {
+      kind: inspectable.dataset.inspect,
+      from: Number(inspectable.dataset.from),
+      to: Number(inspectable.dataset.to),
+      part: inspectable.dataset.part || '',
+      taskIndex: inspectable.dataset.k === undefined ? null : Number(inspectable.dataset.k)
+    } : null
+  };
   $('days').setPointerCapture(e.pointerId);
   e.preventDefault();
 });
@@ -540,9 +618,9 @@ window.addEventListener('pointermove', e => {
 });
 window.addEventListener('pointerup', () => {
   const d = drag; drag = null;
-  if (d && d.kind === 'task' && !d.moved) {
-    const k = d.day.tasks.indexOf(d.task), day = iso(selDay);
-    selTask = selTask && selTask.day === day && selTask.k === k ? null : { day, k };
+  if (d && !d.moved && d.inspect) {
+    inspectedSegment = { ...d.inspect, day: iso(selDay) };
+    selTask = d.inspect.kind === 'task' ? { day: iso(selDay), k: d.inspect.taskIndex } : null;
     render();
   }
 });
