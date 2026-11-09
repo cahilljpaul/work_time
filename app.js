@@ -63,11 +63,11 @@ const DURS = [15, 30, 45, 60, 90, 120, 180];
 let findDur = 60, findText = '', selTask = null;
 let inspectedSegment = null;
 
-function taskBlock(d) {
+function taskBlock(d, work) {
   return `    <ul class="tasks">
       ${d.tasks.map((t, k) => `<li class="${t.done ? 'done' : ''}">
         <input type="checkbox" style="width:auto" data-tdone="${k}" ${t.done ? 'checked' : ''}>
-        <span>${t.time ? `<b>${t.time}</b> ` : ''}${esc(t.text)}${t.time ? ` <small class="hint">${fmtDur(t.dur || 60)}</small>` : ''}</span>
+        <span>${t.time ? `<b>${t.time}</b> ` : ''}${esc(t.text)}${t.time ? ` <small class="hint">${fmtDur(t.dur || 60)}</small>` : ''}${t.cuts ? ` <small class="warn">+${fmtDur(taskCost(t))} work later</small>` : ''}</span>
         ${t.time ? `<button class="chip" data-share="${k}" aria-label="Share">Share</button><button class="chip" data-sendto="${k}" aria-label="Send to a user">Send</button>` : ''}<button class="chip" data-del="${k}" aria-label="Delete">&times;</button></li>`).join('')}
     </ul>
     <div class="row">
@@ -75,7 +75,11 @@ function taskBlock(d) {
       <label style="flex:0 0 110px">Time (auto if blank) <input type="time" step="${tStep()}" class="newtime"></label>
       <label style="flex:0 0 90px">Length <select class="newdur">${DURS.map(m => `<option value="${m}" ${m === 60 ? 'selected' : ''}>${fmtDur(m)}</option>`).join('')}</select></label>
       <button class="primary" data-add="1">Add</button>
-    </div>`;
+    </div>
+    ${work && !d.off ? `<div class="row">
+      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" class="newcuts" style="width:auto"> Takes time out of work (make it up later)</label>
+      <label style="flex:0 0 130px">Commute each way (min) <input type="number" class="newcommute" min="0" step="5" value="0"></label>
+    </div>` : ''}`;
 }
 
 function planRows(d) {
@@ -120,7 +124,7 @@ function busyOf(d) {
     const lo = ((a % 1440) + 1440) % 1440, hi = lo + (b - a);
     if (hi > 1440) out.push([lo, 1440], [0, hi - 1440]); else out.push([lo, hi]);
   }
-  d.tasks.forEach(t => { if (t.time && !t.done) { const a = toMin(t.time); out.push([a, Math.min(1440, a + (t.dur || 60))]); } });
+  d.tasks.forEach(t => { if (t.time && !t.done) { const a = toMin(t.time), c = t.commute || 0; out.push([Math.max(0, a - c), Math.min(1440, a + (t.dur || 60) + c)]); } });
   return out;
 }
 function freeSlots(d, from = 0) {
@@ -321,7 +325,7 @@ function workSections(d, r) {
       ${d.off ? '' : panel('Work hours', workExtras(d, r))}
       ${panel('Sleep', sleepCheck(r))}
     </div>
-    ${panel('Tasks', taskBlock(d), 'wide')}
+    ${panel('Tasks', taskBlock(d, true), 'wide')}
     ${d.off ? '' : `<details class="panel more wide"><summary>Edit times &amp; travel</summary>${planRows(d)}${optRows(d)}</details>`}`;
 }
 
@@ -334,11 +338,13 @@ function personalCard(d, i, date, todayKey) {
 }
 // Core calculations for one day
 function fmtAdj(m) { return (m > 0 ? '+' : m < 0 ? '−' : '') + fmtDur(Math.abs(m)); }
+const taskCost = t => (t.dur || 60) + 2 * (t.commute || 0);
 function calc(d) {
   const s = store.settings;
+  const owed = d.tasks.reduce((n, t) => n + (t.cuts && t.time ? taskCost(t) : 0), 0);
   const required = Math.max(0, s.hours * 60 + (d.adj || 0) - (d.use || 0));
   const lunch = Math.max(0, s.lunch - d.cut);
-  const total = required + lunch;
+  const total = required + lunch + owed;
   const t = toMin(d.time);
   let start, finish;
   if (d.mode === 'start') { start = t; finish = t + total; }
@@ -351,7 +357,7 @@ function calc(d) {
   }
   // Office days get a commute buffer either side of work (actual travel if logged, else the normal commute)
   const buffer = wfh ? 0 : (travel || s.commute);
-  return { adj: d.adj || 0, required, lunch, total, start, finish, travel, earned, wfh, cIn: buffer, cOut: buffer };
+  return { adj: d.adj || 0, owed, required, lunch, total, start, finish, travel, earned, wfh, cIn: buffer, cOut: buffer };
 }
 
 function locRow(d) {
@@ -482,7 +488,16 @@ function addTask(day, d) {
     const slot = freeSlots(d, iso(date) === iso(new Date()) ? NOW_MIN() : 0).find(([a, b]) => b - a >= dur);
     if (slot) time = toTime(slot[0]);
   }
-  d.tasks.push({ text, time, dur, done: false });
+  const task = { text, time, dur, done: false };
+  const cuts = day.querySelector('.newcuts');
+  if (cuts && cuts.checked && time && !d.off) {
+    const r = calc(d), a = toMin(time);
+    if (a < r.finish && a + dur > r.start) {
+      task.cuts = true;
+      task.commute = Math.max(0, Number(day.querySelector('.newcommute').value) || 0);
+    }
+  }
+  d.tasks.push(task);
   d.tasks.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
   selTask = null; save(); render();
 }
